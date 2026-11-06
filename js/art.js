@@ -88,8 +88,6 @@ export function cupSprites(H, scale) {
     sk.hatch(bodyPts, P.ink, { angle: -1.25, gap: 2.4, width: 0.7, alpha: 0.45, from: 0.7, to: 1 });
     sk.hatch(bodyPts, P.ink, { angle: -1.25, gap: 3.6, width: 0.6, alpha: 0.25, from: 0.6, to: 0.7 });
     sk.hatch(bodyPts, P.ink, { angle: -0.15, gap: 2.6, width: 0.6, alpha: 0.3, from: 0, to: 0.12 });
-    // small wordmark printed near the top of the cup
-    wordmarkOn(sk, 0, -H * 0.8, g.tw * 0.5, P.ink, 0.9, -0.04);
     sk.line(bodyPts, P.ink, { width: 1.7, alpha: 0.95, close: true, passes: 3 });
     // inner back wall seen through the mouth
     const mouth = ellipsePts(0, -H, g.rx * 0.95, g.ry * 0.88, 40);
@@ -106,7 +104,7 @@ export function cupSprites(H, scale) {
 }
 
 // ── Sleeve: oxblood band with the cream wordmark ─────────────
-export function sleeveSprite(H, scale) {
+export function sleeveSprite(H, scale, free = false) {
   const g = cupGeo(H), sh = g.sleeveH;
   const wTop = g.widthAt(g.sleeveY + sh / 2) + 4, wBot = g.widthAt(g.sleeveY - sh / 2) + 4;
   const ryT = (wTop / 2) * K, ryB = (wBot / 2) * K, pad = 6;
@@ -120,6 +118,14 @@ export function sleeveSprite(H, scale) {
     ...polyPts([[-wBot / 2, bot], [-wTop / 2, top]]),
   ];
   const s = sprite(w, h, ax, ay, scale, 9, (sk) => {
+    if (free) {
+      // standing alone it's a ring: you can see in through the top
+      const rim = ellipsePts(0, top, wTop / 2, ryT, 36);
+      sk.fill(rim, '#2a0805');
+      sk.hatch(rim, '#000', { angle: -0.3, gap: 2, width: 0.5, alpha: 0.4, from: 0, to: 0.5 });
+      const inner = ellipsePts(0, top + ryT * 0.35, wTop / 2 * 0.86, ryT * 0.55, 30);
+      sk.fill(inner, '#f1ecdc');
+    }
     sk.fill(pts, P.oxblood);
     // subtle corrugation ribs
     const c = sk.ctx; c.save(); c.strokeStyle = '#000'; c.lineWidth = 0.6;
@@ -132,10 +138,12 @@ export function sleeveSprite(H, scale) {
       c.stroke();
     }
     c.restore();
-    sk.glow(pts, -wTop * 0.25, 0, sh * 0.9, '#a2443a', 0.35);
+    sk.hatch(pts, '#000', { angle: -1.25, gap: 2.2, width: 0.6, alpha: 0.35, from: 0.66, to: 1 });
+    sk.hatch(pts, '#000', { angle: -1.25, gap: 3, width: 0.5, alpha: 0.2, from: 0, to: 0.12 });
     wordmarkOn(sk, 0, -sh * 0.06 + ryT * 0.5, wTop * 0.66, P.cream, 0.97);
     if (sh > 26) sk.text('BAGELS & BURGERS', 0, sh * 0.29 + ryT * 0.4, { font: `700 ${sh * 0.1}px Almarai, sans-serif`, color: P.cream, alpha: 0.85, spacing: sh * 0.022 });
     sk.line(pts, P.brown, { width: 1.3, alpha: 0.9, close: true });
+    if (free) sk.line(ellipsePts(0, top, wTop / 2, ryT, 40), P.brown, { width: 1.1, alpha: 0.9, close: true });
   }, { toothAlpha: 0.14, gritAlpha: 0.1 });
   s.wTop = wTop; s.wBot = wBot;
   return s;
@@ -156,20 +164,21 @@ export function lidSprite(H, scale) {
   const topPts = ellipsePts(0, -band, rx * 0.98, ry * 0.98, 44);
   const domePts = ellipsePts(0, -band - dome * 0.5, rx * 0.78, ry * 0.78, 40);
   return sprite(w, h, ax, ay, scale, 13, (sk) => {
-    sk.fill(bandPts, P.forest);
-    sk.glow(bandPts, -rx * 0.4, -band / 2, rx * 0.8, '#3a5a44', 0.6);
-    sk.line(bandPts, P.forest, { width: 1.3, alpha: 0.9, close: true });
-    sk.fill(topPts, '#123a22');
-    sk.glow(topPts, -rx * 0.3, -band - ry * 0.3, rx * 0.9, '#4d7259', 0.55);
-    sk.fill(domePts, '#1b452b');
-    sk.glow(domePts, -rx * 0.25, -band - dome, rx * 0.6, '#6f9479', 0.5);
-    sk.line(domePts, '#000', { width: 0.9, alpha: 0.45, close: true });
-    sk.line(topPts, '#000', { width: 0.8, alpha: 0.35, close: true });
+    // cream plastic lid, drawn in the same green ink as the storefront
+    sk.fill(bandPts, '#f6f2e4');
+    sk.hatch(bandPts, P.ink, { angle: -1.25, gap: 2.2, width: 0.65, alpha: 0.55, from: 0.62, to: 1 });
+    sk.hatch(bandPts, P.ink, { angle: -1.25, gap: 3.4, width: 0.55, alpha: 0.3, from: 0, to: 0.14 });
+    sk.line(bandPts, P.ink, { width: 1.6, alpha: 0.95, close: true, passes: 3 });
+    sk.fill(topPts, P.cream);
+    sk.hatch(topPts, P.ink, { angle: -0.25, gap: 2.6, width: 0.55, alpha: 0.32, from: 0.62, to: 1 });
+    sk.line(topPts, P.ink, { width: 1.3, alpha: 0.9, close: true, passes: 2 });
+    sk.fill(domePts, '#fbf8ee');
+    sk.line(domePts, P.ink, { width: 1.1, alpha: 0.8, close: true, passes: 2 });
+    sk.line(ellipsePts(0, -band - dome * 0.5, rx * 0.66, ry * 0.62, 30, Math.PI * 0.05, Math.PI * 0.95), P.ink, { width: 0.7, alpha: 0.45, passes: 1 });
     // sip hole near the front
-    sk.fill(ellipsePts(0, -band - dome * 0.5 + ry * 0.42, rx * 0.17, ry * 0.15, 20), '#020b05', 0.95);
-    // glossy highlight
-    sk.line(ellipsePts(0, -band - dome * 0.5, rx * 0.66, ry * 0.6, 24, Math.PI * 1.1, Math.PI * 1.45), '#cfe0d2', { width: 1.6, alpha: 0.55, passes: 1 });
-  }, { toothAlpha: 0.12, gritAlpha: 0.08 });
+    const hole = ellipsePts(0, -band - dome * 0.5 + ry * 0.42, rx * 0.17, ry * 0.16, 20);
+    sk.fill(hole, P.ink, 0.92);
+  }, { toothAlpha: 0.16, gritAlpha: 0.1 });
 }
 
 // ── French press ─────────────────────────────────────────────
@@ -194,7 +203,7 @@ export function pressSprites(H, scale) {
   const glass = [...polyPts([[gx0, gy0], [gx0, gy1], [gx1, gy1], [gx1, gy0]]), [gx0, gy0]];
 
   const back = sprite(w, h, ax, ay, scale, 21, (sk) => {
-    sk.fill(glass, P.glass, 0.55);
+    sk.fill(glass, '#eef1e6', 0.6);
     sk.hatch(glass, P.ink, { angle: -1.3, gap: 3.2, width: 0.5, alpha: 0.18, from: 0.75 });
   }, { toothAlpha: 0.1, gritAlpha: 0 });
 
@@ -218,21 +227,23 @@ export function pressSprites(H, scale) {
     // cap
     const cy0 = gy0 - g.cap;
     const cap = [...polyPts([[gx0 - 2, gy0], [gx0 + 3, cy0], [gx1 - 3, cy0], [gx1 + 2, gy0]]), [gx0 - 2, gy0]];
-    sk.fill(cap, P.forest);
-    sk.glow(cap, gx0 + g.gw * 0.25, cy0 + 2, g.gw * 0.4, '#4d7259', 0.6);
-    sk.line(cap, P.forest, { width: 1.2, alpha: 0.9, close: true });
+    sk.fill(cap, P.cream);
+    sk.hatch(cap, P.ink, { angle: -0.9, gap: 1.6, width: 0.8, alpha: 0.85 });
+    sk.line(cap, P.ink, { width: 1.4, alpha: 0.95, close: true, passes: 2 });
     // rod + knob
     sk.line(polyPts([[0, cy0], [0, cy0 - g.rod]]), P.ink, { width: 2.2, alpha: 0.95 });
     const knob = ellipsePts(0, cy0 - g.rod - g.knob, g.knob, g.knob, 24);
-    sk.fill(knob, P.forest);
-    sk.glow(knob, -g.knob * 0.4, cy0 - g.rod - g.knob * 1.4, g.knob, '#7fa58a', 0.7);
+    sk.fill(knob, P.cream);
+    sk.hatch(knob, P.ink, { angle: -0.9, gap: 1.4, width: 0.8, alpha: 0.85, from: 0.3 });
+    sk.line(knob, P.ink, { width: 1.3, alpha: 0.95, close: true });
     // handle (C shape) on the left
     const hx = gx0 - 2, hy0 = gy0 + g.gh * 0.12, hy1 = gy0 + g.gh * 0.78;
     const outer = bezPts([hx, hy0], [hx - g.handle * 1.3, hy0], [hx - g.handle * 1.3, hy1], [hx, hy1], 28);
     const inner = bezPts([hx, hy1 - 8], [hx - g.handle * 0.7, hy1 - 8], [hx - g.handle * 0.7, hy0 + 8], [hx, hy0 + 8], 28);
     const handle = [...outer, ...inner, outer[0]];
-    sk.fill(handle, P.forest);
-    sk.glow(handle, hx - g.handle * 0.9, (hy0 + hy1) / 2, g.handle, '#4d7259', 0.5);
+    sk.fill(handle, P.cream);
+    sk.hatch(handle, P.ink, { angle: -0.9, gap: 1.7, width: 0.8, alpha: 0.8 });
+    sk.line(handle, P.ink, { width: 1.4, alpha: 0.95, close: true, passes: 2 });
   }, { toothAlpha: 0.16, gritAlpha: 0.08 });
   return { back, front, geo: g };
 }

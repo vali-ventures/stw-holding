@@ -15,7 +15,7 @@ const get = (o, path) => path.split('.').reduce((a, k) => (a ? a[k] : undefined)
 $$('[data-copy]').forEach((el) => { const v = get(COPY, el.dataset.copy); if (v != null) el.textContent = v; });
 $$('[data-href]').forEach((el) => { el.href = CONFIG[el.dataset.href]; });
 
-const loadImg = (src) => new Promise((res) => { const i = new Image(); i.decoding = 'async'; i.onload = () => res(i); i.onerror = () => res(null); i.src = src; });
+const loadImg = (src, cors) => new Promise((res) => { const i = new Image(); if (cors) i.crossOrigin = 'anonymous'; i.decoding = 'async'; i.onload = () => res(i); i.onerror = () => res(null); i.src = src; });
 
 function saved() { try { return JSON.parse(localStorage.getItem(SKEY) || 'null'); } catch { return null; } }
 
@@ -26,14 +26,16 @@ async function boot() {
     Promise.all([document.fonts.load('400 20px Ovo'), document.fonts.load('700 12px Almarai')]),
     new Promise((r) => setTimeout(r, 1800)),
   ]).catch(() => {});
-  const [wm] = await Promise.all([loadImg('/assets/wordmark.png'), fontsReady]);
+  const [wm] = await Promise.all([loadImg('/assets/wordmark.png', true), fontsReady]);
   brand.wordmark = wm;
 
-  const storeImgP = loadImg(window.innerWidth < 700 ? '/assets/storefront-640.webp' : '/assets/storefront.webp');
+  // the storefront only shows after signup: fetch it once the person heads that way
+  let storeImgP = null;
+  const storeImg = () => (storeImgP ||= loadImg(Math.min(screen.width, innerWidth) * Math.min(devicePixelRatio || 1, 2) < 900 ? '/assets/storefront-640.webp' : '/assets/storefront.webp'));
 
   const intro = $('.intro'), dock = $('.dock'), final = $('.final'), nudge = $('.nudge');
   const claim = $('.claim'), auto = $('.auto');
-  let nudgeT;
+  let nudgeT, peeks = -1;
 
   const scene = window.__scene = new Scene($('#stage'), {
     onProgress(st) {
@@ -53,7 +55,6 @@ async function boot() {
     onComplete() {
       $('.headline', intro).textContent = COPY.doneHeadline;
       $('.sub', intro).textContent = COPY.doneSub;
-      $('.steps', intro).classList.add('out');
       claim.hidden = false;
       $('.aux').hidden = true;
       nudge.classList.remove('show');
@@ -61,9 +62,11 @@ async function boot() {
     },
     onPeek() {
       const n = $('.peek-note');
-      n.textContent = COPY.peek;
+      peeks = (peeks + 1) % COPY.peek.length;
+      n.textContent = COPY.peek[peeks];
       const t = scene.paper.tear;
-      n.style.setProperty('--peek-y', (t.y - t.r * 3.4) + 'px');
+      n.style.setProperty('--peek-y', (t.y - t.r * 2.6 - 28) + 'px');
+      n.style.setProperty('--peek-x', t.x + 'px');
       n.classList.add('show');
       clearTimeout(n._t); n._t = setTimeout(() => n.classList.remove('show'), 1700);
     },
@@ -71,11 +74,12 @@ async function boot() {
 
   const flow = new Flow($('.sheet'), $('.scrim'), {
     onSaved(info) { try { localStorage.setItem(SKEY, JSON.stringify({ ...info, at: Date.now() })); } catch {} },
-    onClose(didSave) { if (didSave) toStore(false); },
+    onClose(didSave) { scene.pause(false); if (didSave) toStore(false); },
   });
 
-  claim.addEventListener('click', () => { A.unlock(); flow.open('q'); });
-  $('.skip').addEventListener('click', () => { A.unlock(); flow.open('q'); });
+  const openFlow = () => { A.unlock(); storeImg(); scene.pause(true); flow.open('q'); };
+  claim.addEventListener('click', openFlow);
+  $('.skip').addEventListener('click', openFlow);
   auto.addEventListener('click', () => { A.unlock(); scene.autoplay(); });
 
   // sound toggle
@@ -99,14 +103,13 @@ async function boot() {
   }
 
   async function toStore(instant) {
-    const img = await storeImgP;
-    if (!img) return;
+    const img = await storeImg();
     const swap = () => {
       intro.hidden = true; dock.hidden = true; nudge.classList.remove('show');
       final.hidden = false;
       if (instant) $('.final-sub').textContent = COPY.finalReturning;
       layoutStore();
-      scene.toStore(img);
+      if (img) scene.toStore(img); // no image? the confirmation copy still shows
     };
     if (instant) return swap();
     await wipe(swap);
@@ -130,8 +133,7 @@ async function boot() {
     rt = setTimeout(() => { if (scene.mode === 'store') layoutStore(); scene.resize(); }, 120);
   });
 
-  document.body.classList.remove('is-loading');
-  if (saved()) toStore(true);
+  if (saved()) await toStore(true);
   flushQueue();
 }
 
@@ -174,4 +176,4 @@ function kraftTex() {
   return (_kt = c.toDataURL());
 }
 
-boot();
+boot().catch((e) => console.error(e)).finally(() => document.body.classList.remove('is-loading'));

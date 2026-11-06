@@ -1,3 +1,7 @@
+@font-face { font-family: Ovo; font-weight: 400; font-display: swap; src: url(/assets/fonts/ovo-400.woff2) format('woff2'); }
+@font-face { font-family: Almarai; font-weight: 400; font-display: swap; src: url(/assets/fonts/almarai-400.woff2) format('woff2'); }
+@font-face { font-family: Almarai; font-weight: 700; font-display: swap; src: url(/assets/fonts/almarai-700.woff2) format('woff2'); }
+
 /* Saintwood — holding page
    Palette sampled from thesaintwood.com: cream paper, forest-green line art,
    oxblood header, coffee-brown footer. Type: Ovo (display) + Almarai (text). */
@@ -116,7 +120,7 @@ a { color: inherit; }
 }
 .steps li { display: flex; align-items: center; gap: 7px; position: relative; transition: opacity .4s; padding-left: .2em; }
 .steps .box {
-  width: 13px; height: 13px; border: 1.4px solid var(--forest); border-radius: 3px; position: relative;
+  width: 13px; height: 13px; border: 1.5px solid var(--forest); border-radius: 2px 4px 3px 5px / 4px 2px 5px 3px; position: relative; rotate: -3deg;
   transition: background-color .3s var(--ease), transform .4s var(--spring);
 }
 .steps .box::after {
@@ -132,7 +136,7 @@ a { color: inherit; }
 .nudge {
   position: absolute; z-index: 2; left: 0; right: 0; margin: 0; padding: 0 var(--gutter);
   top: var(--nudge-y, 58%); text-align: center; pointer-events: none;
-  font: italic 400 clamp(16px, 4.4vw, 20px)/1.2 Ovo, Georgia, serif; color: var(--forest);
+  font: 400 clamp(17px, 4.6vw, 21px)/1.2 Ovo, Georgia, serif; color: var(--forest);
   opacity: 0; transform: translateY(6px); transition: opacity .35s var(--ease), transform .45s var(--ease);
 }
 .nudge.show { opacity: .9; transform: none; }
@@ -179,15 +183,17 @@ a { color: inherit; }
 .final-actions { margin-top: clamp(14px, 2.4vh, 22px); display: flex; flex-direction: column; align-items: center; gap: 4px; pointer-events: auto; }
 .final-actions .btn { height: 50px; }
 .peek-note {
-  position: absolute; left: 0; right: 0; margin: 0; text-align: center; top: var(--peek-y, 60vh);
-  font: italic 400 22px/1 Ovo, Georgia, serif; color: var(--forest);
+  position: fixed; z-index: 4; left: var(--peek-x, 50%); margin: 0; text-align: center; top: var(--peek-y, 60vh);
+  translate: -50% 0; white-space: nowrap; pointer-events: none;
+  font: 400 21px/1 Ovo, Georgia, serif; color: var(--forest);
+  background: var(--cream); padding: 7px 12px 6px; border-radius: 999px; box-shadow: 0 6px 18px -8px rgba(20,16,8,.35);
   opacity: 0; transform: translateY(6px); transition: opacity .3s, transform .4s var(--ease);
 }
 .peek-note.show { opacity: 1; transform: none; }
 .addr {
   position: fixed; left: 0; right: 0; bottom: calc(var(--safe-b) + 10px); text-align: center;
-  font: 700 9.5px/1 Almarai, sans-serif; font-style: normal; letter-spacing: .24em; text-transform: uppercase; color: var(--muted);
-  padding: 0 var(--gutter);
+  font: 700 9.5px/1 Almarai, sans-serif; font-style: normal; letter-spacing: clamp(.12em, .6vw, .24em); text-transform: uppercase; color: var(--oxblood);
+  padding: 0 var(--gutter); white-space: nowrap;
 }
 
 /* ── Sheet ──────────────────────────────────────────── */
@@ -248,10 +254,10 @@ a { color: inherit; }
 .lede { margin: 10px 0 0; color: var(--muted); font-size: 15.5px; line-height: 1.45; text-wrap: pretty; }
 .sheet.kb .lede { display: none; }
 
-.choices { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 22px 0 6px; }
+.choices { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 22px 0 6px; }
 .choice {
   position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
-  aspect-ratio: 1 / 1.08; min-height: 104px; border-radius: 20px;
+  aspect-ratio: 1 / 1.08; min-height: 96px; min-width: 0; border-radius: 20px;
   border: 1.5px solid rgba(40, 52, 39, .2); background: rgba(255,255,255,.35);
   color: var(--forest); font: 700 15px/1 Almarai, sans-serif;
   transition: transform .25s var(--spring), background-color .25s, border-color .25s, color .25s;

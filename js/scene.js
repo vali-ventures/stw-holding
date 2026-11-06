@@ -36,7 +36,7 @@ export class Scene {
     this.resize();
     this._loop = this._loop.bind(this);
     this.last = performance.now();
-    requestAnimationFrame(this._loop);
+    this._wake();
   }
 
   // ── layout ────────────────────────────────────────────────
@@ -46,24 +46,25 @@ export class Scene {
     if (!W || !H) return;
     const prev = this.W ? { W: this.W, gt: this.gt } : null;
     this.W = W; this.H = H;
-    this.dpr = Math.min(window.devicePixelRatio || 1, 2);
+    // ≤2x, and never more than ~4.5M canvas pixels (big desktop screens)
+    this.dpr = Math.max(1, Math.min(window.devicePixelRatio || 1, 2, Math.sqrt(4.5e6 / (W * H))));
     this.cv.width = Math.round(W * this.dpr); this.cv.height = Math.round(H * this.dpr);
     this.stains = mk(this.cv.width, this.cv.height);
     if (this.mode === 'store') return this._layoutStore();
 
     const portrait = H > W;
-    const hc = clamp(Math.min(W * (portrait ? 0.3 : 0.21), H * (portrait ? 0.2 : 0.235)), 70, 250);
+    const hc = clamp(Math.min(W * (portrait ? 0.315 : 0.22), H * (portrait ? 0.21 : 0.27)), 70, 270);
     this._build(hc);
-    this.depth = hc * 0.5;
-    this.gt = Math.round(Math.min(H * (portrait ? 0.655 : 0.64), H - this.depth - (portrait ? 150 : 110))); // ground top
+    this.depth = hc * 0.62;
+    this.gt = Math.round(Math.min(H * (portrait ? 0.68 : 0.65), H - this.depth - (portrait ? 128 : 104))); // ground top
     this.counter = counterSprite(W + 20, this.depth * 1.3, this.dpr, Math.max(40, H - this.gt));
     const spread = Math.min(W * (portrait ? 0.33 : 0.28), hc * 1.75);
     const cx = W / 2;
     this.home = {
       cup: [cx, this.gt + this.depth * 0.55],
       press: [cx - spread, this.gt + this.depth * 0.3],
-      lid: [cx + spread * 1.0, this.gt + this.depth * 0.06],
-      sleeve: [cx + spread * 0.86, this.gt + this.depth * 1.02],
+      lid: [cx + spread * 1.04, this.gt + this.depth * 0.02],
+      sleeve: [cx + spread * 0.8, this.gt + this.depth * 1.0],
     };
     if (!this.pieces) this._spawn();
     else {
@@ -81,7 +82,7 @@ export class Scene {
     this.g = cupGeo(hc);
     this.pg = pressGeo(hc);
     const s = this.dpr;
-    this.spr = { cup: cupSprites(hc, s), sleeve: sleeveSprite(hc, s), lid: lidSprite(hc, s), press: pressSprites(hc, s) };
+    this.spr = { cup: cupSprites(hc, s), sleeve: sleeveSprite(hc, s), sleeveFree: sleeveSprite(hc, s, true), lid: lidSprite(hc, s), press: pressSprites(hc, s) };
     this.grav = hc * 16;
   }
 
@@ -110,6 +111,7 @@ export class Scene {
     const el = this.cv;
     const pos = (e) => { const r = el.getBoundingClientRect(); return [e.clientX - r.left, e.clientY - r.top]; };
     el.addEventListener('pointerdown', (e) => {
+      this._dragged = false;
       if (this.auto || this.ptr) return;
       A.unlock();
       const [x, y] = pos(e);
@@ -275,15 +277,35 @@ export class Scene {
   }
 
   // ── simulation ───────────────────────────────────────────
+  pause(on) {
+    this.paused = on;
+    if (!on) { this.last = performance.now(); this._wake(); }
+  }
+  _wake() { if (!this._raf) this._raf = requestAnimationFrame(this._loop); }
+
+  // Busy = something is moving. When nothing is, we only redraw at ~20fps for
+  // the ambient bits (steam, the bobbing arrow), and not at all under the sheet.
+  _busy() {
+    if (this.ptr || this.auto || this.np || this.ripples.length) return true;
+    for (const p of Object.values(this.pieces)) if (p.held || Math.abs(p.vx) > 1 || Math.abs(p.vy) > 1 || Math.abs(p.va || 0) > 0.01 || p.sliding || p.brewing) return true;
+    const c = this.pieces.cup;
+    return Math.abs(c.sloshV) > 0.01 || Math.abs(c.squashV) > 0.01 || Math.abs(c.lidOffV) > 0.5 || (this._doneT > 0 && !this.done) || (this.peekT != null && this.t - this.peekT < 2.4);
+  }
+
   _loop(now) {
-    const dt = Math.min(0.033, (now - this.last) / 1000);
-    this.last = now; this.t += dt;
-    if (this.pieces && this.W) {
-      const sub = 2;
-      for (let i = 0; i < sub; i++) this._step(dt / sub);
-      this._render();
+    this._raf = 0;
+    if (this.paused) return;
+    const gap = now - this.last;
+    const busy = this.pieces && this._busy();
+    if (busy || gap > 48) {
+      const dt = Math.min(0.033, gap / 1000);
+      this.last = now; this.t += dt;
+      if (this.pieces && this.W) {
+        for (let i = 0; i < 2; i++) this._step(dt / 2);
+        this._render();
+      }
     }
-    requestAnimationFrame(this._loop);
+    this._wake();
   }
 
   _step(dt) {
@@ -428,13 +450,14 @@ export class Scene {
     const pivot = [0, -pg.base - pg.gh * 0.5];
     if (!p.held) {
       p.tilt = lerp(p.tilt, 0, Math.min(1, dt * 10));
-      if (Math.abs(p.tilt) < 0.05 && p.y >= this.gt - 1 && p.vol < pg.capacity) {
-        p.vol = Math.min(pg.capacity, p.vol + dt * 0.6); // set it down and it tops itself up
-      }
+      // run it dry, set it down, and a fresh pot brews (slowly fills back up)
+      if (p.vol < 0.05 && !p.brewing && Math.abs(p.tilt) < 0.05 && p.vy === 0) { p.brewing = true; this.hooks.onNudge && this.hooks.onNudge('nudgeBrew'); }
+      if (p.brewing) { p.vol = Math.min(pg.capacity, p.vol + dt * 0.45); if (p.vol >= pg.capacity) p.brewing = false; }
       p.rate = 0; A.pour(0); return;
     }
     // which way to pour: toward the cup
-    if (Math.abs(p.tilt) < 0.15) p.face = c.x >= p.x ? 1 : -1;
+    // only re-decide which way to pour when clearly to one side of the cup (no flip-flopping overhead)
+    if (Math.abs(p.tilt) < 0.15 && Math.abs(c.x - p.x) > g.rx * 0.9) p.face = c.x >= p.x ? 1 : -1;
     const f = p.face;
     // predicted spout position at a typical pour angle
     const th = 1.35 * f;
@@ -468,7 +491,15 @@ export class Scene {
       A.pour(Math.min(1, p.rate * 1.6), c.fill, intoCup);
       if (this.pieces.lid.attached && Math.abs(wx - c.x) < g.rx * 1.2) this._nudge('lid', 'nudgeLidFirst');
     } else A.pour(0);
-    if (p.vol <= 0.02 && Math.abs(p.tilt) > 1) this._nudge('empty', 'nudgeEmpty');
+    if (p.vol <= 0.02 && Math.abs(p.tilt) > 1 && this.pieces.cup.fill < FULL) this._nudge('empty', 'nudgeEmpty');
+  }
+
+  _spoutWorld() {
+    const p = this.pieces.press, pg = this.pg, f = p.face;
+    const pivot = [0, -pg.base - pg.gh * 0.5];
+    const sx = pg.spout[0] * f - pivot[0], sy = pg.spout[1] - pivot[1];
+    const ca = Math.cos(p.tilt), sa = Math.sin(p.tilt);
+    return [p.x + pivot[0] + sx * ca - sy * sa, p.y + pivot[1] + sx * sa + sy * ca];
   }
 
   // liquid polygon of the glass at a tilt (local frame, spout at +x)
@@ -547,48 +578,49 @@ export class Scene {
   }
 
   _stepParticles(dt) {
-    const P = this.parts, c = this.pieces.cup, g = this.g, H = this.hc;
+    const Q = this.parts, c = this.pieces.cup, g = this.g, H = this.hc;
     const lidOn = this.pieces.lid.attached;
     const mouthY = c.y - H * (1 - c.squash) + g.ry * 0.1;
     const sctx = this.stains.getContext('2d');
     let w = 0;
     for (let i = 0; i < this.np; i++) {
-      let x = P.x[i], y = P.y[i], vx = P.vx[i], vy = P.vy[i];
+      let x = Q.x[i], y = Q.y[i], vx = Q.vx[i], vy = Q.vy[i];
       const py = y;
-      if (P.f[i] === 2) { vy = Math.min(vy + this.grav * 0.25 * dt, H * 1.2); vx *= 0.9; } // drip clinging to the cup
+      if (Q.f[i] === 2) { vy = Math.min(vy + this.grav * 0.25 * dt, H * 1.2); vx *= 0.9; } // drip clinging to the cup
       else vy += this.grav * dt;
       x += vx * dt; y += vy * dt;
       let dead = false;
       const dx = Math.abs(x - c.x);
-      if (P.f[i] !== 2 && py < mouthY && y >= mouthY && dx < g.rx * 0.92) {
+      if (Q.f[i] !== 2 && py < mouthY && y >= mouthY && dx < g.rx * 0.92) {
         if (lidOn) {
           // bounces off the lid
           vy = -Math.abs(vy) * 0.25; vx = (x > c.x ? 1 : -1) * (80 + Math.random() * 160); y = mouthY - 2;
-          P.f[i] = 3;
+          Q.f[i] = 3;
           this._splashSound();
-        } else if (P.f[i] !== 3) {
-          c.fill += P.v[i];
+        } else if (Q.f[i] !== 3) {
+          c.fill += Q.v[i];
           if (Math.random() < 0.25) this.ripples.push({ x: (x - c.x) / g.rx, t: 0 });
           c.sloshV += (Math.random() - 0.5) * 0.4;
           dead = true;
         }
       }
-      if (!dead && y >= P.g[i]) {
+      if (!dead && y >= Q.g[i]) {
         // lands on the counter: leaves a stain
-        this.spilled += P.v[i];
-        const r = H * (0.03 + Math.min(0.08, P.v[i] * 3)) * (0.7 + Math.random() * 0.6);
+        this.spilled += Q.v[i];
+        const r = H * (0.03 + Math.min(0.08, Q.v[i] * 3)) * (0.7 + Math.random() * 0.6);
         sctx.save(); sctx.scale(this.dpr, this.dpr);
-        sctx.fillStyle = P.coffee; sctx.globalAlpha = 0.14;
-        sctx.beginPath(); sctx.ellipse(x + (Math.random() - 0.5) * 4, P.g[i], r * 1.6, r * 0.5, 0, 0, Math.PI * 2); sctx.fill();
-        sctx.globalAlpha = 0.25; sctx.lineWidth = 0.6; sctx.strokeStyle = P.brown; sctx.stroke();
+        // a little coffee puddle: pale wash, darker ring where it dries
+        sctx.fillStyle = P.coffeeHi; sctx.globalAlpha = 0.16;
+        sctx.beginPath(); sctx.ellipse(x + (Math.random() - 0.5) * 4, Q.g[i], r * 1.6, r * 0.5, 0, 0, Math.PI * 2); sctx.fill();
+        sctx.globalAlpha = 0.3; sctx.lineWidth = 0.7; sctx.strokeStyle = P.coffee; sctx.stroke();
         sctx.restore();
-        if (Math.random() < 0.08 && P.f[i] !== 4) { this._emit(x, P.g[i] - 1, (Math.random() - 0.5) * 160, -120 - Math.random() * 120, 0, 4); }
+        if (Math.random() < 0.08 && Q.f[i] !== 4) { this._emit(x, Q.g[i] - 1, (Math.random() - 0.5) * 160, -120 - Math.random() * 120, 0, 4); }
         this._splashSound();
         if (this.spilled > 0.12 && this.mode === 'bench') this._nudge('spill', 'nudgeSpill');
         dead = true;
       }
       if (!dead && (x < -50 || x > this.W + 50 || y > this.H + 50)) dead = true;
-      if (!dead) { P.x[w] = x; P.y[w] = y; P.vx[w] = vx; P.vy[w] = vy; P.v[w] = P.v[i]; P.f[w] = P.f[i]; P.g[w] = P.g[i]; w++; }
+      if (!dead) { Q.x[w] = x; Q.y[w] = y; Q.vx[w] = vx; Q.vy[w] = vy; Q.v[w] = Q.v[i]; Q.f[w] = Q.f[i]; Q.g[w] = Q.g[i]; w++; }
     }
     this.np = w;
     if (c.fill > 0.02 && this._lastFillReport !== Math.round(c.fill * 20)) { this._lastFillReport = Math.round(c.fill * 20); this._progress(); }
@@ -720,7 +752,7 @@ export class Scene {
     const s = this.pieces.sleeve, g = this.g;
     const gy = s.held ? (this.ptr ? this.ptr.groundY : s.y) : (s.groundY ?? s.y);
     this._ground(x, s.x, Math.max(gy, s.y), g.tw * 0.8, Math.max(0, gy - s.y));
-    x.save(); x.translate(s.x, s.y - g.sleeveH / 2); x.rotate(s.a); drawSprite(x, this.spr.sleeve); x.restore();
+    x.save(); x.translate(s.x, s.y - g.sleeveH / 2); x.rotate(s.a); drawSprite(x, this.spr.sleeveFree); x.restore();
   }
 
   _drawPress(x) {
@@ -822,14 +854,18 @@ export class Scene {
         const ox = this.ptr.offX, oy = this.ptr.offY;
         await glide(gx, gy, tx + ox - 0, ty + oy - (-pg.base - pg.gh * 0.5) * 0 - 0, 900);
         const t0 = performance.now();
-        while (c.fill < 0.7 && p.vol > 0.03 && performance.now() - t0 < 6000) await new Promise(requestAnimationFrame);
+        let px0 = tx + ox;
+        // steer like a person would: keep the stream landing mid-cup
+        while (c.fill < 0.7 && p.vol > 0.03 && performance.now() - t0 < 6000) {
+          if (Math.abs(p.tilt) > 0.6) { const [sxw] = this._spoutWorld(); px0 += ((c.x - f * g.rx * 0.12) - sxw) * 0.12; this.move(px0, ty + oy); }
+          await new Promise(requestAnimationFrame);
+        }
         this._upright = true;
         await wait(450);
-        const bx = tx + ox - f * H * 0.6, by = ty + oy - H * 0.3;
-        await glide(tx + ox, ty + oy, bx, by, 350);
-        this._upright = false;
+        const bx = px0 - f * H * 0.6, by = ty + oy;
+        await glide(px0, ty + oy, bx, by, 350);
         await glide(bx, by, this.home.press[0] + ox, this.home.press[1] - H * 0.3 + oy, 600);
-        this.up(); await wait(450);
+        this.up(); this._upright = false; await wait(450);
       }
       if (!P0.sleeve.attached) {
         const [sx, sy] = this._sleevePos(); this.down(sx, sy);
@@ -894,7 +930,9 @@ export class Scene {
 
   _renderStoreBg(x) {
     const b = this.storeBox;
+    x.save(); x.globalCompositeOperation = 'multiply';
     x.drawImage(this.storeImg, b.x, b.y, b.w, b.h);
+    x.restore();
     // the tear opens a little when tapped, then settles back
     const since = this.peekT != null ? this.t - this.peekT : 9;
     const open = since < 2.2 ? Math.sin(Math.min(1, since / 0.35) * Math.PI / 2) * (1 - smooth(1.6, 2.2, since)) : 0;
@@ -929,6 +967,7 @@ const PANES = [
   [897, 408, 1024, 838],
 ];
 const TEAR = [700, 560]; // on the right-hand window
+const TEAR_R = 34;
 
 function buildPaper(box, dpr) {
   const s = box.w / 1024;
@@ -936,7 +975,7 @@ function buildPaper(box, dpr) {
   x.scale(dpr * s, dpr * s);
   let seed = 7; const r = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
   for (const [x0, y0, x1, y1] of PANES) {
-    x.save();
+    x.save(); x.globalAlpha = 1;
     x.beginPath(); x.rect(x0, y0, x1 - x0, y1 - y0); x.clip();
     x.fillStyle = '#d9c3a0'; x.fillRect(x0, y0, x1 - x0, y1 - y0);
     // sheets of paper with seams, creases and hatch
@@ -961,11 +1000,11 @@ function buildPaper(box, dpr) {
     x.globalAlpha = 0.9; x.strokeStyle = P.ink; x.lineWidth = 2.2; x.strokeRect(x0, y0, x1 - x0, y1 - y0);
   }
   x.globalAlpha = 1;
-  return { c, tear: { x: box.x + TEAR[0] * s, y: box.y + TEAR[1] * s, r: 26 * s } };
+  return { c, tear: { x: box.x + TEAR[0] * s, y: box.y + TEAR[1] * s, r: Math.max(14, TEAR_R * s) } };
 }
 
 function drawPaper(x, paper, box, open, img, t) {
-  const s = box.w / 1024, tr = 26 * s * (1 + open * 1.6);
+  const s = box.w / 1024, tr = TEAR_R * s * (1 + open * 1.7);
   const tx = box.x + TEAR[0] * s, ty = box.y + TEAR[1] * s;
   // paper layer, with a hole punched where the tear is
   const tmp = paper._tmp || (paper._tmp = mk(paper.c.width, paper.c.height));
@@ -989,9 +1028,17 @@ function drawPaper(x, paper, box, open, img, t) {
   // warm glow inside the tear
   x.save();
   x.beginPath(); pts.forEach(([a, b], i) => (i ? x.lineTo(box.x + a, box.y + b) : x.moveTo(box.x + a, box.y + b))); x.closePath(); x.clip();
-  const gr = x.createRadialGradient(tx, ty, 0, tx, ty, tr * 1.4);
-  gr.addColorStop(0, `rgba(255,214,140,${0.25 + open * 0.35})`); gr.addColorStop(1, 'rgba(255,214,140,0)');
+  // behind the paper: the lights are on
+  x.fillStyle = '#1d140c'; x.fillRect(tx - tr * 2, ty - tr * 2, tr * 4, tr * 4);
+  const gr = x.createRadialGradient(tx - tr * 0.2, ty - tr * 0.3, 0, tx, ty, tr * 1.3);
+  gr.addColorStop(0, `rgba(255,212,140,${0.55 + open * 0.45})`); gr.addColorStop(0.6, `rgba(232,150,70,${0.25 + open * 0.3})`); gr.addColorStop(1, 'rgba(60,30,10,0)');
   x.fillStyle = gr; x.fillRect(tx - tr * 2, ty - tr * 2, tr * 4, tr * 4);
+  // a pendant lamp and the edge of the counter, just visible
+  x.strokeStyle = 'rgba(255,236,200,.85)'; x.lineWidth = Math.max(1, 1.6 * s);
+  x.beginPath(); x.moveTo(tx + tr * 0.15, ty - tr * 1.2); x.lineTo(tx + tr * 0.15, ty - tr * 0.35); x.stroke();
+  x.beginPath(); x.arc(tx + tr * 0.15, ty - tr * 0.18, tr * 0.18, 0, Math.PI * 2); x.stroke();
+  x.fillStyle = `rgba(255,240,205,${0.6 + open * 0.4})`; x.beginPath(); x.arc(tx + tr * 0.15, ty - tr * 0.18, tr * 0.1, 0, Math.PI * 2); x.fill();
+  x.beginPath(); x.moveTo(tx - tr * 1.2, ty + tr * 0.55); x.lineTo(tx + tr * 1.2, ty + tr * 0.45); x.stroke();
   x.restore();
   x.drawImage(tmp, box.x, box.y, box.w, box.h);
   // the arrow pointing into the tear (wiggles a touch)

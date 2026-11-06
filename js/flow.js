@@ -146,14 +146,14 @@ export class Flow {
       e.preventDefault();
       const d = this.state.phone;
       if (d.length !== 10 || !this._validPhone(d)) return this._phoneErr();
-      if (R.querySelector('.hp').value) return this._show('email'); // bot
       const btn = R.querySelector('.send');
       btn.disabled = true; btn.textContent = COPY.phoneSending;
       this.state.id = this.state.id || newId();
       try {
         await send({
           type: 'signup', id: this.state.id, phone: '+1' + d, interest: this.state.interest,
-          consent: { sms: true, text: COPY.smsDisclosure, version: CONFIG.consentVersion },
+          consent: { sms: true, version: CONFIG.consentVersion },
+          company: R.querySelector('.hp').value || undefined, // honeypot
         });
         this.state.saved = true;
         this.hooks.onSaved && this.hooks.onSaved({ id: this.state.id, last4: d.slice(-4) });
@@ -179,7 +179,7 @@ export class Flow {
       }
       this.state.email = v;
       em.blur();
-      send({ type: 'update', id: this.state.id, email: v, consent: { email: true, text: COPY.emailDisclosure } }).catch(() => {});
+      send({ type: 'update', id: this.state.id, email: v }).catch(() => {});
       A.tick();
       this._show('ig');
     });
@@ -187,7 +187,7 @@ export class Flow {
 
     // step 4
     R.querySelector('.step[data-step="ig"] .ig').addEventListener('click', () => {
-      send({ type: 'update', id: this.state.id, instagramClicked: true }).catch(() => {});
+      if (this.state.id) send({ type: 'update', id: this.state.id, instagramClicked: true }).catch(() => {});
       setTimeout(() => this.close(true), 600);
     });
     R.querySelector('.finish').addEventListener('click', () => this.close(true));

@@ -13,10 +13,18 @@
   <meta name="twitter:card" content="summary_large_image">
   <link rel="icon" href="/assets/favicon.png">
   <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Almarai:wght@400;700;800&family=Ovo&display=swap" rel="stylesheet">
+  <link rel="preload" href="/assets/fonts/ovo-400.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="/assets/fonts/almarai-400.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="/assets/fonts/almarai-700.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="/assets/wordmark.png" as="image" crossorigin>
   <link rel="stylesheet" href="/css/style.css">
+  <link rel="modulepreload" href="/js/config.js">
+  <link rel="modulepreload" href="/js/sketch.js">
+  <link rel="modulepreload" href="/js/art.js">
+  <link rel="modulepreload" href="/js/audio.js">
+  <link rel="modulepreload" href="/js/scene.js">
+  <link rel="modulepreload" href="/js/api.js">
+  <link rel="modulepreload" href="/js/flow.js">
   <script type="module" src="/js/main.js"></script>
 </head>
 <body class="is-loading">
@@ -44,6 +52,7 @@
   </section>
 
   <p class="nudge" role="status" aria-live="polite"></p>
+  <p class="peek-note" aria-live="polite"></p>
 
   <footer class="dock view" data-view="bench">
     <button class="btn btn-primary claim" type="button" data-copy="claim" hidden></button>
@@ -65,8 +74,7 @@
       </a>
       <button class="link again" type="button" data-copy="pourAnother"></button>
     </div>
-    <p class="peek-note" aria-live="polite"></p>
-    <address class="addr">5697 S Jones Blvd, Suite 160 · Las Vegas</address>
+    <address class="addr">5697 S Jones Blvd #160 · Las Vegas</address>
   </section>
 
   <!-- Signup sheet -->
