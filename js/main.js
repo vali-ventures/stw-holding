@@ -64,6 +64,14 @@ async function boot() {
       nudge.classList.remove('show'); clearTimeout(nudgeT);
       setTimeout(() => claim.focus({ preventScroll: true }), 50);
     },
+    onIncomplete() {
+      // they undid it (spilled, lid or sleeve off): back to building
+      $('.headline', intro).textContent = COPY.headline;
+      $('.sub', intro).textContent = COPY.sub;
+      $('.steps', intro).classList.remove('out');
+      claim.hidden = true;
+      $('.aux').hidden = false;
+    },
     onPeek() {
       const n = $('.peek-note');
       peeks = (peeks + 1) % COPY.peek.length;

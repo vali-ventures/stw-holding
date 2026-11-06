@@ -328,7 +328,7 @@ export class Scene {
     if (this.paused) return;
     const gap = now - this.last;
     const busy = this.pieces && this._busy();
-    if (busy || gap > 48) {
+    if (gap > 0 && (busy || gap > 48)) {
       const dt = Math.min(0.033, gap / 1000);
       this.last = now; this.t += dt;
       if (this.pieces && this.W) {
@@ -379,7 +379,6 @@ export class Scene {
         const k1 = Math.min(1, dt * 28);
         const nx = lerp(p.x, tx, k1), ny = lerp(p.y, ty, k1);
         const nvx = (nx - p.x) / dt, nvy = (ny - p.y) / dt;
-        p.ax = (nvx - p.vx) / dt; p.ay = (nvy - p.vy) / dt;
         p.vx = lerp(p.vx, nvx, 0.5); p.vy = lerp(p.vy, nvy, 0.5);
         p.x = nx; p.y = ny;
         // swing: tilt with horizontal motion (press handles its own tilt)
@@ -460,15 +459,32 @@ export class Scene {
     // lid follows the cup if attached
     if (lid.attached) { lid.x = cup.x; lid.y = cup.y; lid.a = cup.a; }
 
+    // "Ready" is live, not sticky: spill below the line or take the lid/sleeve off and
+    // it isn't ready any more. (A small buffer below the line stops it flickering.)
     if (!this.done && this._complete()) {
       this._doneT = (this._doneT || 0) + dt;
       if (this._doneT > 0.45) { this.done = true; A.chime(); A.haptic(20); this.hooks.onComplete && this.hooks.onComplete(); }
-    } else this._doneT = 0;
+    } else {
+      this._doneT = 0;
+      const { cup, lid, sleeve } = this.pieces;
+      if (this.done && this.mode === 'bench' && (cup.fill < FULL - 0.04 || !lid.attached || !sleeve.attached)) {
+        this.done = false; this.hooks.onIncomplete && this.hooks.onIncomplete();
+      }
+    }
+    // puddles soak into the counter and fade away (on wall-clock time)
+    const now = performance.now();
+    if (now - (this._fadeAt || 0) > 1000) {
+      // ~10s to half; whatever faint trace is left is cleared once it's been quiet a while
+      this._fadeAt = now;
+      const sc = this.stains.getContext('2d');
+      if (now - (this.lastStainAt || -1e9) > 35000) sc.clearRect(0, 0, this.stains.width, this.stains.height);
+      else { sc.save(); sc.globalCompositeOperation = 'destination-out'; sc.globalAlpha = 0.07; sc.fillRect(0, 0, this.stains.width, this.stains.height); sc.restore(); }
+    }
   }
 
   _complete() {
     const { cup, lid, sleeve } = this.pieces;
-    return this.mode === 'bench' && cup.fill >= FULL && lid.attached && sleeve.attached && !cup.held;
+    return this.mode === 'bench' && cup.fill >= FULL && lid.attached && sleeve.attached;
   }
 
   _maybeThread(p, tx, ty) {
@@ -647,32 +663,38 @@ export class Scene {
     return (this._angCache[key] = Math.min(a, 2.9));
   }
 
-  _jolt(v) {
-    const c = this.pieces.cup;
-    c.sloshV += (Math.random() - 0.5) * v * 0.004;
-    c.squashV += v / (this.hc * 60);
-  }
+  _jolt(v) { this.pieces.cup.squashV += v / (this.hc * 60); }
 
   _stepCup(dt) {
     const c = this.pieces.cup, g = this.g, H = this.hc;
-    // slosh: surface offset driven by cup acceleration
-    const ax = c.held ? (c.ax || 0) : 0, ay = c.held ? (c.ay || 0) : 0;
-    // side-to-side shakes slosh it; up-and-down shakes kick it about too
-    c.sloshV += (-c.slosh * 90 - c.sloshV * 6 - ax * 0.0011) * dt + (Math.random() < 0.5 ? -1 : 1) * Math.min(Math.abs(ay), 20000) * 0.00004 * dt * 60;
-    c.slosh += c.sloshV * dt;
-    c.slosh = clamp(c.slosh, -1.3, 1.3);
-    // How hard it's being shaken (smoothed). A real shake slops coffee over the rim;
-    // the fuller the cup, the less it takes. Gentle carrying spills nothing. Lid on: nothing.
-    c.shake = lerp(c.shake || 0, Math.hypot(ax, ay * 0.7), Math.min(1, dt * 6));
-    const T = H * (55 + 200 * (1 - Math.min(1, c.fill)));
-    const over = c.held && c.fill > 0.06 ? (c.shake - T) / T : -1;
-    if (!this.pieces.lid.attached && (over > 0 || (c.fill > 0.7 && Math.abs(c.slosh) > 0.45))) {
-      // it sloshes over the rim, on the side the cup is being thrown away from
-      const side = over > 0 ? -Math.sign(ax || c.slosh || 1) : Math.sign(c.slosh);
-      const amt = Math.min(c.fill - 0.04, dt * (over > 0 ? 0.5 * Math.min(1.5, over + 0.3) : 0.6 * Math.abs(c.slosh)));
+    if (!(dt > 0)) return; // two frames with the same timestamp: nothing to integrate
+    // ── The coffee surface (one physical model, no special rules) ──
+    // When a cup accelerates, its liquid surface tilts against the motion (angle = atan(a/g))
+    // and sloshes like a wave around that angle. If the raised edge of the surface climbs
+    // past the rim, that much coffee pours over. Everything follows from this: a brim-full
+    // cup spills on a quick move, a half cup only on a hard swing, a lidded cup never.
+    const ax0 = ((c.vx || 0) - (c.pvx || 0)) / dt, ay0 = ((c.vy || 0) - (c.pvy || 0)) / dt;
+    c.pvx = c.vx || 0; c.pvy = c.vy || 0;
+    c.fax = lerp(c.fax || 0, ax0, Math.min(1, dt * 25)); // smooth out finger noise
+    c.fay = lerp(c.fay || 0, ay0, Math.min(1, dt * 25));
+    const gLiquid = H * 98;                                // real gravity at the cup's scale (~10cm cup)
+    const gEff = Math.max(gLiquid * 0.15, gLiquid - c.fay);   // falling cup → lighter liquid
+    const target = Math.atan2(c.fax, gEff);                 // + = left side up (accelerating right)
+    const w = 19, zeta = 0.08;                              // ~3 Hz slosh, lightly damped
+    c.sloshV += (w * w * (target - c.slosh) - 2 * zeta * w * c.sloshV) * dt;
+    c.slosh = clamp(c.slosh + c.sloshV * dt, -1.2, 1.2);
+    if (!Number.isFinite(c.slosh) || !Number.isFinite(c.sloshV)) { c.slosh = 0; c.sloshV = 0; c.fax = 0; c.fay = 0; }
+    const rel = c.slosh - c.a;                              // surface angle relative to the cup
+    const level = Math.min(1, c.fill) * H * 0.94;
+    const halfW = g.widthAt(level) / 2 * 0.95;
+    // a moving wave runs up the wall higher than a flat tilted surface would (~1.5×)
+    const excess = level + Math.tan(Math.min(1.2, Math.abs(rel))) * halfW * 1.5 - H * 0.97;
+    if (!this.pieces.lid.attached && c.fill > 0.005 && excess > 0) {
+      const side = rel > 0 ? -1 : 1;                        // spills over the raised edge
+      const amt = Math.min(c.fill, (excess / (H * 0.94)) * dt * 8);
       c.fill -= amt;
-      const [sx, sy] = [c.x + side * g.rx * 0.9, c.y - H];
-      for (let i = 0; i < 2; i++) this._emit(sx, sy, side * (60 + Math.random() * 120) + c.vx * 0.5, -40 - Math.random() * 60 + c.vy * 0.3, amt / 2, 0);
+      const sx = c.x + side * g.rx * 0.92, sy = c.y - H;
+      for (let i = 0; i < 2; i++) this._emit(sx, sy, side * (40 + Math.random() * 80) + c.vx * 0.6, -20 - Math.random() * 50 + c.vy * 0.4, amt / 2, 0);
     }
     // overflow: pour too much and it runs down the side
     if (c.fill > 1.0) {
@@ -718,13 +740,13 @@ export class Scene {
         } else if (Q.f[i] !== 3) {
           c.fill += Q.v[i];
           if (Math.random() < 0.25) this.ripples.push({ x: (x - c.x) / g.rx, t: 0 });
-          c.sloshV += (Math.random() - 0.5) * 0.4;
+          c.sloshV += (Math.random() - 0.5) * 0.02; // the stream landing makes ripples, not waves
           dead = true;
         }
       }
       if (!dead && y >= Q.g[i]) {
         // lands on the counter: leaves a stain
-        this.spilled += Q.v[i];
+        this.spilled += Q.v[i]; this.lastStainAt = performance.now();
         const r = H * (0.045 + Math.min(0.08, Q.v[i] * 3)) * (0.7 + Math.random() * 0.6);
         sctx.save(); sctx.scale(this.dpr, this.dpr);
         // a little coffee puddle: pale wash, darker ring where it dries
@@ -809,11 +831,11 @@ export class Scene {
       x.beginPath(); x.ellipse(0, -H, g.rx * 0.95, g.ry * 0.88, 0, 0, Math.PI * 2); x.clip();
       const cy = -H + (1 - f) * g.ry * 1.7;
       const rx = g.rx * 0.95 * (0.8 + 0.2 * f), ry = rx * K;
-      const ox = c.slosh * rx * 0.22;
+      const rel = c.slosh - c.a, ox = Math.sin(rel) * rx * 0.3;
       const grd = x.createRadialGradient(ox - rx * 0.3, cy - ry * 0.3, 1, ox, cy, rx);
       grd.addColorStop(0, P.crema); grd.addColorStop(0.55, P.coffeeHi); grd.addColorStop(1, P.coffee);
       x.fillStyle = grd;
-      x.beginPath(); x.ellipse(ox, cy, rx, ry, c.slosh * 0.06, 0, Math.PI * 2); x.fill();
+      x.beginPath(); x.ellipse(ox, cy, rx, ry, rel * 0.08, 0, Math.PI * 2); x.fill();
       // ripples from the pour
       x.strokeStyle = '#e8c79c'; x.lineWidth = 0.9;
       for (const r of this.ripples) {

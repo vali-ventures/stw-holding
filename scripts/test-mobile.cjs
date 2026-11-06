@@ -60,11 +60,9 @@ const check = (dev, name, ok, detail = '') => { results.push({ dev, name, ok, de
     const zig = [c0]; for (let i = 0; i < 8; i++) zig.push([c0[0] + (i % 2 ? -1 : 1) * g.H * 0.55, c0[1] - g.H * 0.4]);
     await drag(zig, { steps: 3, frame: 16, wait: 1200 });
     s = await S(); check(dev, 'shaking an open full cup spills', s.fill < before - 0.05, `fill ${before.toFixed(2)} → ${s.fill.toFixed(2)}`);
-    // top up, lid on, shake: nothing comes out
-    await p.waitForTimeout(3500);
-    if (process.env.DBG) { const gg = await G(); console.log('  before top-up', JSON.stringify({ pr: gg.pr.map(Math.round), cup: gg.cup.map(Math.round), face: await p.evaluate(() => window.__scene.pieces.press.face), vol: (await S()).vol.toFixed(2) })); }
-    if (process.env.DBG) { const gg = await G(); const side = gg.pr[0] < gg.cup[0] ? -1 : 1; await touch('touchStart', gg.pr[0], gg.pr[1]); for (const [x,y] of [[gg.cup[0] + side*gg.H*1.6, gg.cup[1]-gg.H*1.6],[gg.cup[0] + side*gg.H*0.75, gg.cup[1]-gg.H*1.6]]) { for (let k=1;k<=10;k++){ await touch('touchMove', x, y); await p.waitForTimeout(16);} } await p.waitForTimeout(1200); await p.screenshot({ path: OUT + '/topup-' + dev.replace(/ /g,'_') + '.png' }); console.log('  mid top-up', JSON.stringify(await p.evaluate(() => { const S=window.__scene,pr=S.pieces.press; return { held: pr.held, kind: S.ptr && S.ptr.kind, tilt: pr.tilt.toFixed(2), face: pr.face, intent: (pr.intent||0).toFixed(2), x: pr.x|0 }; }))); await p.waitForTimeout(1400); await touch('touchEnd'); await p.waitForTimeout(900); } else
-    await pour(2600);
+    // put the cup back in the middle (it got thrown about), top up, lid on, shake: nothing comes out
+    g = await G(); await drag([[g.cup[0], g.cup[1] - g.H * 0.75], [g.W / 2, g.cup[1] - g.H * 1.1], [g.W / 2, g.cup[1] - g.H * 0.7]], { steps: 14, frame: 20 });
+    await p.waitForTimeout(3500); await pour(3600);
     g = await G(); await drag([g.lid, [g.cup[0] + 3, g.cup[1] - g.H * 0.5]]);
     s = await S(); const lidded = s.fill;
     g = await G(); const c1 = [g.cup[0], g.cup[1] - g.H * 0.75]; const zig2 = [c1]; for (let i = 0; i < 8; i++) zig2.push([c1[0] + (i % 2 ? -1 : 1) * g.H * 0.55, c1[1] - g.H * 0.4]);
