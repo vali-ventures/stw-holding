@@ -200,7 +200,7 @@ export class Scene {
       this.ptr.mode = 'drag';
       this.ptr.offX = x - p.x; this.ptr.offY = y - p.y;
     }
-    p.held = true; p.vx = p.vy = 0;
+    p.held = true; p.vx = p.vy = 0; if (k === 'press') { p.intent = 0; p.retreat = false; }
     this.ptr.kind = k; this._grabbing = true;
     this.ptr.groundY = clamp(p.y, this.gt, this.gt + this.depth);
     if (k === 'cup') this.ptr.groundY = clamp(p.y, this.gt, this.gt + this.depth);
@@ -475,6 +475,7 @@ export class Scene {
     const p = this.pieces.press, c = this.pieces.cup, pg = this.pg, g = this.g, H = this.hc;
     const pivot = [0, -pg.base - pg.gh * 0.5];
     if (!p.held) {
+      p.intent = 0;
       p.tilt = lerp(p.tilt, 0, Math.min(1, dt * 10));
       // run it dry, set it down, and a fresh pot brews (slowly fills back up)
       if (p.vol < 0.05 && !p.brewing && Math.abs(p.tilt) < 0.05 && p.vy === 0) { p.brewing = true; }
@@ -494,13 +495,20 @@ export class Scene {
     const mouthY = c.y - H;
     const hx = Math.abs(psx - c.x), above = mouthY - psy;
     const prox = (1 - smooth(g.rx * 0.9, g.rx * 3.0, hx)) * smooth(-H * 0.05, H * 0.15, above) * (1 - smooth(H * 1.3, H * 2.2, above));
-    const need = this._needAngle(p.vol);
-    // away from the cup it still behaves like a real pot: fling or shake it and
-    // it tips with the motion — and slops coffee all over the counter
-    const fling = clamp((p.vx || 0) * 0.0016, -1.6, 1.6) * (1 - prox);
-    const target = this._upright ? 0 : f * prox * Math.min(2.3, need + 0.45) + fling;
-    // tip in gently, right it quickly (that's what stops the dribble)
-    p.tilt = lerp(p.tilt, target, Math.min(1, dt * (Math.abs(target) < Math.abs(p.tilt) ? 7 : 6)));
+    // Pour intent: push the press toward its spout and it starts to pour, and keeps
+    // pouring while you hold it there. Pull it back (or let go) and it rights itself.
+    // Hovering over the cup pours too. Either way it tips as far as it needs to for a
+    // steady stream, so it keeps flowing as it empties.
+    const fwd = (p.vx || 0) * f;
+    if (this.auto) { p.intent = 0; p.retreat = false; }
+    else if (fwd > H * 0.45) { p.intent = Math.min(1, (p.intent || 0) + dt * 5); p.retreat = false; }
+    else if (fwd < -H * 0.6) { p.intent = Math.max(0, (p.intent || 0) - dt * 8); p.retreat = true; }
+    // pulling it back always wins over "hovering over the cup"
+    const want = Math.max(p.intent || 0, p.retreat ? 0 : prox);
+    // nothing left? level it out instead of tipping it upside down
+    const target = this._upright || p.vol < 0.03 ? 0 : f * want * this._pourAngle(p.vol);
+    // tip in smoothly, right it a little quicker (that's what stops the dribble)
+    p.tilt = lerp(p.tilt, target, Math.min(1, dt * (Math.abs(target) < Math.abs(p.tilt) ? 6 : 3.5)));
     p.a = p.tilt;
 
     // flow: how far the spout sits below the liquid surface
@@ -554,13 +562,16 @@ export class Scene {
     const sp = [this.pg.glass.x1, this.pg.glass.y0];
     return sp[0] * n[0] + sp[1] * n[1] - d;
   }
-  _needAngle(vol) {
-    const key = Math.round(vol * 40);
+  // The angle that gives a steady stream at this fill level: the spout sits a fixed
+  // depth under the surface. Fuller pot → small tilt; nearly empty → tipped right over.
+  _pourAngle(vol) {
+    const key = this.hc + ':' + Math.round(vol * 60);
     this._angCache = this._angCache || {};
     if (this._angCache[key] !== undefined) return this._angCache[key];
-    let a = 0;
-    for (; a < 2.4; a += 0.04) if (this._spoutDepth(vol, a) > 0) break;
-    return (this._angCache[key] = a);
+    const want = this.hc * 0.12;
+    let a = 0.1;
+    for (; a < 2.9; a += 0.03) if (this._spoutDepth(vol, a) >= want) break;
+    return (this._angCache[key] = Math.min(a, 2.9));
   }
 
   _jolt(v) {
@@ -905,7 +916,7 @@ export class Scene {
         const t0 = performance.now();
         let px0 = tx + ox;
         // steer like a person would: keep the stream landing mid-cup
-        while (c.fill < 0.7 && p.vol > 0.03 && performance.now() - t0 < 8000) {
+        while (c.fill < FULL + 0.05 && p.vol > 0.03 && performance.now() - t0 < 9000) {
           if (gen !== this._gen) throw new Error('layout changed');
           if (Math.abs(p.tilt) > 0.6) { const [sxw] = this._spoutWorld(); px0 += ((c.x - f * g.rx * 0.12) - sxw) * 0.12; this.move(px0, ty + oy); }
           await new Promise(requestAnimationFrame);
