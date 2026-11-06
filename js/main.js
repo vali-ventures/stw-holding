@@ -20,6 +20,13 @@ const loadImg = (src, cors) => new Promise((res) => { const i = new Image(); if 
 function saved() { try { return JSON.parse(localStorage.getItem(SKEY) || 'null'); } catch { return null; } }
 
 async function boot() {
+  // Testing helper: ?reset forgets this browser's signup (and any queued events), then
+  // cleans the URL so a refresh doesn't keep resetting.
+  if (new URLSearchParams(location.search).has('reset')) {
+    try { for (const k of Object.keys(localStorage)) if (k.startsWith('sw:') && k !== 'sw:muted') localStorage.removeItem(k); } catch {}
+    const u = new URL(location.href); u.searchParams.delete('reset');
+    history.replaceState(null, '', u.pathname + u.search + u.hash);
+  }
   document.body.style.setProperty('--paper-tex', `url(${paperDataURL('#fffcf0')})`);
   // fonts + wordmark are needed before sprites are drawn (they're baked in)
   const fontsReady = Promise.race([
