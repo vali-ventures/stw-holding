@@ -255,7 +255,7 @@ export class Scene {
     if (q.kind === 'lid' && this._lidOverCup(p)) {
       const [, sy] = this._seat();
       if (p.y >= sy - 2) return this._snapLid(); // let go on/below the rim: it pops on
-      p.dropping = true; // above the rim: it falls onto it (see _step)
+      p.dropping = true; p.vx *= 0.15; p.x = lerp(p.x, this._seat()[0], 0.5); // above the rim: it falls onto it
     }
     if (q.kind === 'sleeve' && p.threaded) { p.sliding = true; p.sv = Math.min(0, p.sv); return; }
     if (q.kind === 'sleeve' && this._dropSleeve(p)) return;
@@ -379,7 +379,7 @@ export class Scene {
         const k1 = Math.min(1, dt * 28);
         const nx = lerp(p.x, tx, k1), ny = lerp(p.y, ty, k1);
         const nvx = (nx - p.x) / dt, nvy = (ny - p.y) / dt;
-        p.ax = (nvx - p.vx) / dt;
+        p.ax = (nvx - p.vx) / dt; p.ay = (nvy - p.vy) / dt;
         p.vx = lerp(p.vx, nvx, 0.5); p.vy = lerp(p.vy, nvy, 0.5);
         p.x = nx; p.y = ny;
         // swing: tilt with horizontal motion (press handles its own tilt)
@@ -409,6 +409,12 @@ export class Scene {
         const m = k === 'cup' ? this.g.tw / 2 : k === 'press' ? this.pg.gw / 2 + this.pg.handle + 4 : k === 'lid' ? this.g.lidW / 2 + 4 : this.g.tw / 2 + 4;
         if (p.x < m) { p.x = m; p.vx = Math.abs(p.vx) * 0.4; }
         if (p.x > this.W - m) { p.x = this.W - m; p.vx = -Math.abs(p.vx) * 0.4; }
+        // resting near an edge: ease in a touch so nothing sits hard against it
+        if (Math.abs(p.vx) < 30) {
+          const soft = m + 8;
+          if (p.x < soft) p.x += (soft - p.x) * Math.min(1, dt * 5);
+          if (p.x > this.W - soft) p.x -= (p.x - (this.W - soft)) * Math.min(1, dt * 5);
+        }
         p.va += ((0 - p.a) * 260 - p.va * 20) * dt; p.a += p.va * dt;
         if (Math.abs(p.vx) < 1 && p.y >= gy) p.groundY = gy;
       }
@@ -435,8 +441,14 @@ export class Scene {
         const a = free[i], b = free[j], dx = b.x - a.x, need = half(a) + half(b) + 4;
         if (Math.abs(dx) < need && Math.abs(b.y - a.y) < this.depth * 0.9) {
           const push = Math.min(need - Math.abs(dx), 240 * dt) / 2, dir = Math.sign(dx) || 1;
-          a.x = clamp(a.x - dir * push, half(a), this.W - half(a));
-          b.x = clamp(b.x + dir * push, half(b), this.W - half(b));
+          const la = half(a) + 8, lb = half(b) + 8;
+          // one of them is against a wall: the other takes the whole push (no tug-of-war)
+          let nax = clamp(a.x - dir * push, la, this.W - la);
+          const wantB = push + (push - Math.abs(nax - a.x));
+          const nbx = clamp(b.x + dir * wantB, lb, this.W - lb);
+          const lostB = wantB - Math.abs(nbx - b.x);
+          if (lostB > 0.01) nax = clamp(a.x - dir * (push + lostB), la, this.W - la);
+          a.x = nax; b.x = nbx;
         }
       }
     }
@@ -533,14 +545,19 @@ export class Scene {
     if (!p.held) {
       p.intent = 0;
       p.tilt = lerp(p.tilt, 0, Math.min(1, dt * 10));
-      // run it dry, set it down, and a fresh pot brews (slowly fills back up)
-      if (p.vol < 0.05 && !p.brewing && Math.abs(p.tilt) < 0.05 && p.vy === 0) { p.brewing = true; }
+      // set it down on the counter for a moment and it tops back up (never get stuck
+      // with a few drops and no way to finish the cup)
+      const resting = Math.abs(p.tilt) < 0.05 && p.vy === 0 && Math.abs(p.vx) < 1;
+      p.restT = resting ? (p.restT || 0) + dt : 0;
+      if (!p.brewing && p.restT > 0.6 && p.vol < pg.capacity - 0.02) p.brewing = true;
       if (p.brewing) { p.vol = Math.min(pg.capacity, p.vol + dt * 0.45); if (p.vol >= pg.capacity) p.brewing = false; }
       p.rate = 0; A.pour(0); return;
     }
     // which way to pour: toward the cup
     // only re-decide which way to pour when clearly to one side of the cup (no flip-flopping overhead)
-    if (Math.abs(p.tilt) < 0.15 && Math.abs(c.x - p.x) > g.rx * 0.9) p.face = c.x >= p.x ? 1 : -1;
+    // Spout always faces the cup while the press is upright and not mid-pour
+    // (never flips while tipped, so no flip-flopping right over the cup).
+    if (Math.abs(p.tilt) < 0.15 && (p.intent || 0) < 0.05 && Math.abs(c.x - p.x) > 3) p.face = c.x >= p.x ? 1 : -1;
     const f = p.face;
     // predicted spout position at a typical pour angle
     const th = 1.35 * f;
@@ -554,6 +571,7 @@ export class Scene {
     // Pour intent: push the press toward its spout and it starts to pour, and keeps
     // pouring while you hold it there. Pull it back (or let go) and it rights itself.
     // It tips as far as it needs to for a steady stream, so it keeps flowing as it empties.
+    p.restT = 0; p.brewing = false;
     const fwd = (p.vx || 0) * f;
     if (this.auto) p.intent = 0;
     else if (fwd > H * 0.45) p.intent = Math.min(1, (p.intent || 0) + dt * 5);
@@ -638,14 +656,20 @@ export class Scene {
   _stepCup(dt) {
     const c = this.pieces.cup, g = this.g, H = this.hc;
     // slosh: surface offset driven by cup acceleration
-    const ax = c.held ? (c.ax || 0) : 0;
-    c.sloshV += (-c.slosh * 90 - c.sloshV * 6 - ax * 0.0009) * dt;
+    const ax = c.held ? (c.ax || 0) : 0, ay = c.held ? (c.ay || 0) : 0;
+    // side-to-side shakes slosh it; up-and-down shakes kick it about too
+    c.sloshV += (-c.slosh * 90 - c.sloshV * 6 - ax * 0.0011) * dt + (Math.random() < 0.5 ? -1 : 1) * Math.min(Math.abs(ay), 20000) * 0.00004 * dt * 60;
     c.slosh += c.sloshV * dt;
-    c.slosh = clamp(c.slosh, -1.2, 1.2);
-    if (!this.pieces.lid.attached && c.fill > 0.7 && Math.abs(c.slosh) > 0.45) {
-      // it sloshes over the rim
-      const side = Math.sign(c.slosh);
-      const amt = Math.min(c.fill - 0.6, dt * 0.6 * Math.abs(c.slosh));
+    c.slosh = clamp(c.slosh, -1.3, 1.3);
+    // How hard it's being shaken (smoothed). A real shake slops coffee over the rim;
+    // the fuller the cup, the less it takes. Gentle carrying spills nothing. Lid on: nothing.
+    c.shake = lerp(c.shake || 0, Math.hypot(ax, ay * 0.7), Math.min(1, dt * 6));
+    const T = H * (55 + 200 * (1 - Math.min(1, c.fill)));
+    const over = c.held && c.fill > 0.06 ? (c.shake - T) / T : -1;
+    if (!this.pieces.lid.attached && (over > 0 || (c.fill > 0.7 && Math.abs(c.slosh) > 0.45))) {
+      // it sloshes over the rim, on the side the cup is being thrown away from
+      const side = over > 0 ? -Math.sign(ax || c.slosh || 1) : Math.sign(c.slosh);
+      const amt = Math.min(c.fill - 0.04, dt * (over > 0 ? 0.5 * Math.min(1.5, over + 0.3) : 0.6 * Math.abs(c.slosh)));
       c.fill -= amt;
       const [sx, sy] = [c.x + side * g.rx * 0.9, c.y - H];
       for (let i = 0; i < 2; i++) this._emit(sx, sy, side * (60 + Math.random() * 120) + c.vx * 0.5, -40 - Math.random() * 60 + c.vy * 0.3, amt / 2, 0);
