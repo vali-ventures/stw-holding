@@ -100,6 +100,7 @@ a { color: inherit; }
 .steps { transition: opacity .4s var(--ease), transform .5s var(--ease); }
 /* while a piece is being dragged, the copy steps back so art never fights text */
 body.dragging .intro { opacity: .12; transition: opacity .25s var(--ease); }
+body.dragging, body.dragging #stage { cursor: grabbing !important; }
 
 .intro, .final {
   position: absolute; left: 0; right: 0; z-index: 2;
