@@ -1,0 +1,13 @@
+{
+  "name": "saintwood-holding",
+  "private": true,
+  "type": "module",
+  "version": "1.0.0",
+  "description": "Saintwood opening-soon holding page: pour-your-first-coffee + SMS signup.",
+  "scripts": {
+    "dev": "node server/dev.js",
+    "export": "node scripts/export.mjs",
+    "send-codes": "node scripts/send-codes.mjs"
+  },
+  "engines": { "node": ">=18" }
+}
