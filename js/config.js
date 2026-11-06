@@ -26,6 +26,7 @@ export const COPY = {
   // Gentle nudges when things go sideways
   nudgeLidFirst: 'Lid goes on last.',
   nudgeSpill: 'Oops — a little spill.',
+  nudgeFlood: 'That was the whole pot. Set it down to refill.',
   nudgeEmpty: 'Empty. Set it down to refill.',
   nudgeBrew: 'Refilling…',
 

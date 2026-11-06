@@ -477,13 +477,16 @@ export class Scene {
     const hx = Math.abs(psx - c.x), above = mouthY - psy;
     const prox = (1 - smooth(g.rx * 0.9, g.rx * 3.0, hx)) * smooth(-H * 0.05, H * 0.15, above) * (1 - smooth(H * 1.3, H * 2.2, above));
     const need = this._needAngle(p.vol);
-    const target = this._upright ? 0 : f * prox * Math.min(2.3, need + 0.45);
+    // away from the cup it still behaves like a real pot: fling or shake it and
+    // it tips with the motion — and slops coffee all over the counter
+    const fling = clamp((p.vx || 0) * 0.0016, -1.6, 1.6) * (1 - prox);
+    const target = this._upright ? 0 : f * prox * Math.min(2.3, need + 0.45) + fling;
     // tip in gently, right it quickly (that's what stops the dribble)
-    p.tilt = lerp(p.tilt, target, Math.min(1, dt * (Math.abs(target) < Math.abs(p.tilt) ? 9 : 5)));
+    p.tilt = lerp(p.tilt, target, Math.min(1, dt * (Math.abs(target) < Math.abs(p.tilt) ? 7 : 6)));
     p.a = p.tilt;
 
     // flow: how far the spout sits below the liquid surface
-    const depth = this._spoutDepth(p.vol, Math.abs(p.tilt));
+    const depth = p.tilt * f > 0 ? this._spoutDepth(p.vol, Math.abs(p.tilt)) : -1;
     const rate = depth > 0 ? Math.min(0.5, 0.06 + depth / (H * 0.14) * 0.3) : 0;
     p.rate = lerp(p.rate, rate, Math.min(1, dt * 12));
     if (p.rate > 0.01 && p.vol > 0) {
@@ -615,16 +618,18 @@ export class Scene {
       if (!dead && y >= Q.g[i]) {
         // lands on the counter: leaves a stain
         this.spilled += Q.v[i];
-        const r = H * (0.03 + Math.min(0.08, Q.v[i] * 3)) * (0.7 + Math.random() * 0.6);
+        const r = H * (0.045 + Math.min(0.08, Q.v[i] * 3)) * (0.7 + Math.random() * 0.6);
         sctx.save(); sctx.scale(this.dpr, this.dpr);
         // a little coffee puddle: pale wash, darker ring where it dries
-        sctx.fillStyle = P.coffeeHi; sctx.globalAlpha = 0.16;
-        sctx.beginPath(); sctx.ellipse(x + (Math.random() - 0.5) * 4, Q.g[i], r * 1.6, r * 0.5, 0, 0, Math.PI * 2); sctx.fill();
-        sctx.globalAlpha = 0.3; sctx.lineWidth = 0.7; sctx.strokeStyle = P.coffee; sctx.stroke();
+        // soft overlapping washes merge into a puddle; only a faint drying edge
+        sctx.fillStyle = P.coffeeHi; sctx.globalAlpha = 0.12;
+        sctx.beginPath(); sctx.ellipse(x + (Math.random() - 0.5) * 6, Q.g[i], r * 1.8, r * 0.55, 0, 0, Math.PI * 2); sctx.fill();
+        if (Math.random() < 0.3) { sctx.globalAlpha = 0.12; sctx.lineWidth = 0.6; sctx.strokeStyle = P.coffee; sctx.stroke(); }
         sctx.restore();
         if (Math.random() < 0.08 && Q.f[i] !== 4) { this._emit(x, Q.g[i] - 1, (Math.random() - 0.5) * 160, -120 - Math.random() * 120, 0, 4); }
         this._splashSound();
         if (this.spilled > 0.12 && this.mode === 'bench') this._nudge('spill', 'nudgeSpill');
+        if (this.spilled > 1.1 && this.mode === 'bench') this._nudge('flood', 'nudgeFlood');
         dead = true;
       }
       if (!dead && (x < -50 || x > this.W + 50 || y > this.H + 50)) dead = true;
@@ -774,7 +779,7 @@ export class Scene {
     drawSprite(x, S.back);
     // liquid stays level in world space
     if (p.vol > 0.003) {
-      const { poly } = this._liquid(p.vol, Math.abs(p.tilt));
+      const { poly } = this._liquid(p.vol, p.tilt * p.face);
       if (poly.length > 2) {
         x.fillStyle = P.coffee; x.globalAlpha = 0.92;
         x.beginPath(); poly.forEach(([a, b], i) => (i ? x.lineTo(a, b) : x.moveTo(a, b))); x.closePath(); x.fill();
@@ -787,17 +792,30 @@ export class Scene {
   }
 
   _drawParticles(x) {
-    const P0 = this.parts;
+    const Q = this.parts, n = this.np;
+    if (!n) return;
+    const r0 = Math.max(1.4, this.hc * 0.02), link = this.hc * 0.3;
     x.save();
-    x.fillStyle = P.coffee;
-    for (let i = 0; i < this.np; i++) {
-      const r = P0.f[i] === 1 ? Math.max(1.6, this.hc * 0.022) : Math.max(1.1, this.hc * 0.012);
-      x.globalAlpha = 0.9;
+    x.strokeStyle = P.coffee; x.fillStyle = P.coffee; x.lineCap = 'round'; x.lineJoin = 'round';
+    x.globalAlpha = 0.92;
+    // consecutive particles from the same pour are joined into one ribbon: reads as liquid
+    x.lineWidth = r0 * 1.7;
+    x.beginPath();
+    let open = false;
+    for (let i = 0; i < n; i++) {
+      const cont = i > 0 && Q.f[i] === 1 && Q.f[i - 1] === 1 && Math.abs(Q.x[i] - Q.x[i - 1]) + Math.abs(Q.y[i] - Q.y[i - 1]) < link;
+      if (cont) { if (!open) { x.moveTo(Q.x[i - 1], Q.y[i - 1]); open = true; } x.lineTo(Q.x[i], Q.y[i]); }
+      else open = false;
+    }
+    x.stroke();
+    // loose drops: small, round, slightly stretched by speed
+    for (let i = 0; i < n; i++) {
+      const joined = (i > 0 && Q.f[i] === 1 && Q.f[i - 1] === 1) || (i < n - 1 && Q.f[i] === 1 && Q.f[i + 1] === 1);
+      if (joined) continue;
+      const r = Q.f[i] === 1 ? r0 * 0.8 : r0 * 0.6;
+      const sp = Math.hypot(Q.vx[i], Q.vy[i]);
       x.beginPath();
-      // stretch along velocity: reads as a stream
-      const sp = Math.hypot(P0.vx[i], P0.vy[i]);
-      const ang = Math.atan2(P0.vy[i], P0.vx[i]);
-      x.ellipse(P0.x[i], P0.y[i], r + Math.min(r * 3, sp * 0.004), r, ang, 0, Math.PI * 2);
+      x.ellipse(Q.x[i], Q.y[i], r + Math.min(r * 1.5, sp * 0.002), r, Math.atan2(Q.vy[i], Q.vx[i]), 0, Math.PI * 2);
       x.fill();
     }
     x.restore();
