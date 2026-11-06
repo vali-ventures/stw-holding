@@ -51,6 +51,7 @@
     </ol>
   </section>
 
+
   <p class="nudge" role="status" aria-live="polite"></p>
   <p class="peek-note" aria-live="polite"></p>
 
@@ -58,8 +59,6 @@
     <button class="btn btn-primary claim" type="button" data-copy="claim" hidden></button>
     <div class="aux">
       <button class="link auto" type="button" data-copy="autoplay"></button>
-      <span class="dot" aria-hidden="true">·</span>
-      <button class="link skip" type="button" data-copy="skip"></button>
     </div>
   </footer>
 
@@ -72,7 +71,6 @@
         <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="3.5" width="17" height="17" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.3" cy="6.7" r="1" class="fill"/></svg>
         <span data-copy="igCta"></span>
       </a>
-      <button class="link again" type="button" data-copy="pourAnother"></button>
     </div>
     <address class="addr">5697 S Jones Blvd #160 · Las Vegas</address>
   </section>
@@ -82,7 +80,7 @@
   <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title" hidden>
     <div class="sheet-inner">
       <div class="sheet-head">
-        <div class="pips" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+        <div class="pips" aria-hidden="true"><i></i><i></i><i></i></div>
         <button class="close" type="button" aria-label="Close">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
         </button>
@@ -91,14 +89,12 @@
       <div class="steps-wrap">
         <!-- 1. Question -->
         <form class="step" data-step="q" novalidate>
-          <p class="eyebrow" data-copy="q1Eyebrow"></p>
           <h2 id="sheet-title" class="title" data-copy="q1Title"></h2>
           <div class="choices" role="radiogroup" aria-labelledby="sheet-title"></div>
         </form>
 
         <!-- 2. Phone -->
         <form class="step" data-step="phone" novalidate hidden>
-          <p class="eyebrow" data-copy="phoneEyebrow"></p>
           <h2 class="title" data-copy="phoneTitle"></h2>
           <p class="lede" data-copy="phoneSub"></p>
           <label class="phone" for="phone">
@@ -108,7 +104,7 @@
             <input id="phone" name="phone" type="tel" inputmode="numeric" autocomplete="tel-national" enterkeyhint="done" maxlength="17" aria-describedby="phone-err sms-legal">
           </label>
           <p class="err" id="phone-err" role="alert"></p>
-          <input class="hp" type="text" name="company" tabindex="-1" autocomplete="off" aria-hidden="true">
+          <input class="hp" type="text" name="sw_hp" tabindex="-1" autocomplete="off" aria-hidden="true">
           <button class="btn btn-primary wide send" type="submit" disabled data-copy="phoneCta"></button>
           <p class="legal" id="sms-legal"><span data-copy="smsDisclosure"></span> <a data-href="smsTermsUrl" target="_blank" rel="noopener">SMS Terms</a> · <a data-href="privacyUrl" target="_blank" rel="noopener">Privacy</a></p>
         </form>
@@ -123,24 +119,10 @@
             <input id="email" name="email" type="email" inputmode="email" autocomplete="email" autocapitalize="off" spellcheck="false" enterkeyhint="send" placeholder="you@email.com" aria-describedby="email-err">
           </label>
           <p class="err" id="email-err" role="alert"></p>
-          <div class="row">
-            <button class="btn btn-ghost skip-email" type="button" data-copy="emailSkip"></button>
-            <button class="btn btn-primary add" type="submit" data-copy="emailCta"></button>
-          </div>
-          <p class="legal" data-copy="emailDisclosure"></p>
+          <button class="btn btn-primary wide add" type="submit" data-copy="emailCta"></button>
+          <button class="link skip-email" type="button" data-copy="emailSkip"></button>
         </form>
 
-        <!-- 4. Instagram -->
-        <div class="step" data-step="ig" hidden>
-          <p class="eyebrow" data-copy="igEyebrow"></p>
-          <h2 class="title" data-copy="igTitle"></h2>
-          <p class="lede" data-copy="igSub"></p>
-          <a class="btn btn-primary wide ig" target="_blank" rel="noopener" data-href="instagramUrl">
-            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="3.5" width="17" height="17" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.3" cy="6.7" r="1" class="fill"/></svg>
-            <span data-copy="igCta"></span>
-          </a>
-          <button class="btn btn-ghost wide finish" type="button" data-copy="igDone"></button>
-        </div>
       </div>
     </div>
   </div>

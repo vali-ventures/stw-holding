@@ -69,11 +69,18 @@ export class Scene {
     if (!this.pieces) this._spawn();
     else {
       // keep progress, re-home anything resting
+      // a resize/rotation mid-game: let go of everything and put pieces back on the new counter
+      this.ptr = null; this._gen = (this._gen || 0) + 1; this._upright = false;
+      const sl = this.pieces.sleeve;
+      if (sl.threaded && !sl.attached) { sl.threaded = false; sl.sliding = false; }
       for (const k of ['cup', 'press', 'lid', 'sleeve']) {
         const p = this.pieces[k];
-        if (p.attached || p.held) continue;
-        p.x = this.home[k][0]; p.y = this.home[k][1]; p.vx = p.vy = 0; p.a = 0;
+        p.held = false; p.groundY = undefined; p.vx = p.vy = 0; p.a = 0; p.va = 0;
+        if (p.attached) continue;
+        p.x = this.home[k][0]; p.y = this.home[k][1];
       }
+      this.pieces.press.tilt = 0; this.np = 0; this.pieces.cup.lidOff = 0; this.pieces.cup.lidOffV = 0;
+      this.stains.getContext('2d').clearRect(0, 0, this.stains.width, this.stains.height);
     }
   }
 
@@ -170,8 +177,8 @@ export class Scene {
     return Math.abs(x - c.x) < this.g.tw / 2 + 12 && y < c.y + 14 && y > c.y - H - this.g.ry - 16;
   }
 
-  down(x, y, id = 'auto') {
-    const k = this._hit(x, y);
+  down(x, y, id = 'auto', force) {
+    const k = force || this._hit(x, y);
     if (!k) return false;
     const P0 = this.pieces, p = P0[k];
     this.idle = 0; this._dragged = false;
@@ -334,7 +341,8 @@ export class Scene {
           const m = k === 'press' ? this.pg.gw / 2 + this.pg.handle + 4 : k === 'lid' ? this.g.lidW / 2 + 4 : this.g.tw / 2 + 4;
           tx = clamp(tx, m, this.W - m); ty = clamp(ty, this.hc * 0.9, this.gt + this.depth);
         } else {
-          tx = clamp(tx, this.g.tw / 2, this.W - this.g.tw / 2); ty = clamp(ty, this.hc + 30, this.gt + this.depth);
+          const minY = this.mode === 'store' ? this.storeBox.y + this.hc * 1.2 : this.hc + 30;
+          tx = clamp(tx, this.g.tw / 2, this.W - this.g.tw / 2); ty = clamp(ty, minY, this.gt + this.depth);
         }
         const k1 = Math.min(1, dt * 28);
         const nx = lerp(p.x, tx, k1), ny = lerp(p.y, ty, k1);
@@ -821,7 +829,10 @@ export class Scene {
     const bob = Math.sin(this.t * 4) * 4;
     const a = Math.min(1, (this.idle - 1.1) * 2);
     const side = tx < this.W / 2 ? 1 : -1;
-    const p0 = [tx + side * this.hc * 0.55, ty - this.hc * 0.55 + bob], p1 = [tx + side * 4, ty - 6 + bob];
+    let p0 = [tx + side * this.hc * 0.55, ty - this.hc * 0.55 + bob];
+    const p1 = [tx + side * 4, ty - 6 + bob];
+    const ceil = (this.textBottom || 0) + 10;
+    if (p0[1] < ceil) p0 = [tx + side * this.hc * 0.75, Math.max(ceil, ty - this.hc * 0.2) + bob];
     const pts = bezPts(p0, [p0[0] - side * this.hc * 0.05, p0[1] + this.hc * 0.3], [p1[0] + side * this.hc * 0.25, p1[1] - this.hc * 0.05], p1, 18);
     liveLine(x, pts, P.ink, 2, 0.85 * a, 1);
     const ang = Math.atan2(p1[1] - pts[15][1], p1[0] - pts[15][0]);
@@ -834,10 +845,12 @@ export class Scene {
     if (this.auto || this.done) return;
     this.auto = true; A.unlock();
     const P0 = this.pieces, H = this.hc, g = this.g, pg = this.pg;
-    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms)).then(() => { if (gen !== this._gen) throw new Error('layout changed'); });
+    const gen = this._gen;
     const glide = async (x0, y0, x1, y1, ms) => {
       const t0 = performance.now();
       while (true) {
+        if (gen !== this._gen) throw new Error('layout changed');
         const k = Math.min(1, (performance.now() - t0) / ms), e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
         this.move(lerp(x0, x1, e), lerp(y0, y1, e));
         if (k >= 1) break;
@@ -845,10 +858,10 @@ export class Scene {
       }
     };
     try {
-      if (P0.lid.attached) { const [lx, ly] = this._seat(); this.down(lx, ly - H * 0.05); await glide(lx, ly - H * 0.05, lx, ly - H * 0.5, 350); await glide(lx, ly - H * 0.5, this.home.lid[0], this.home.lid[1] - H * 0.4, 400); this.up(); await wait(400); }
+      if (P0.lid.attached) { const [lx, ly] = this._seat(); this.down(lx, ly - H * 0.05, 'auto', 'lid'); await glide(lx, ly - H * 0.05, lx, ly - H * 0.5, 350); await glide(lx, ly - H * 0.5, this.home.lid[0], this.home.lid[1] - H * 0.4, 400); this.up(); await wait(400); }
       if (P0.cup.fill < FULL) {
         const p = P0.press, gx = p.x, gy = p.y - pg.base - pg.gh * 0.5;
-        this.down(gx, gy);
+        this.down(gx, gy, 'auto', 'press');
         const c = P0.cup, f = c.x >= p.x ? 1 : -1;
         const tx = c.x - f * (pg.gh * 0.5 + H * 0.05), ty = c.y - H - H * 0.42;
         const ox = this.ptr.offX, oy = this.ptr.offY;
@@ -857,6 +870,7 @@ export class Scene {
         let px0 = tx + ox;
         // steer like a person would: keep the stream landing mid-cup
         while (c.fill < 0.7 && p.vol > 0.03 && performance.now() - t0 < 6000) {
+          if (gen !== this._gen) throw new Error('layout changed');
           if (Math.abs(p.tilt) > 0.6) { const [sxw] = this._spoutWorld(); px0 += ((c.x - f * g.rx * 0.12) - sxw) * 0.12; this.move(px0, ty + oy); }
           await new Promise(requestAnimationFrame);
         }
@@ -868,7 +882,7 @@ export class Scene {
         this.up(); this._upright = false; await wait(450);
       }
       if (!P0.sleeve.attached) {
-        const [sx, sy] = this._sleevePos(); this.down(sx, sy);
+        const [sx, sy] = this._sleevePos(); this.down(sx, sy, 'auto', 'sleeve');
         const c = P0.cup, top = c.y - H - g.sleeveH * 0.9;
         await glide(sx, sy, sx, top, 420);
         await glide(sx, top, c.x, top, 520);
@@ -877,15 +891,18 @@ export class Scene {
         this.up(); await wait(700);
       }
       if (!P0.lid.attached) {
-        const l = P0.lid; this.down(l.x, l.y - H * 0.05);
+        const l = P0.lid; this.down(l.x, l.y - H * 0.05, 'auto', 'lid');
         const [sx, sy] = this._seat();
         await glide(l.x, l.y - H * 0.05, sx, sy - H * 0.4, 700);
         await glide(sx, sy - H * 0.4, sx, sy + H * 0.15, 380);
         if (this.ptr) this.up();
       }
+    } catch (e) {
+      // layout changed mid-run (rotation): stop cleanly; tapping again restarts
+      this.ptr = null;
     } finally {
       this._upright = false;
-      if (this.ptr) this.up();
+      if (this.ptr && this.auto) this.up();
       this.auto = false;
     }
   }

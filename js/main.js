@@ -3,7 +3,7 @@ import { Scene } from './scene.js';
 import { Flow } from './flow.js';
 import { brand } from './art.js';
 import { paperDataURL } from './sketch.js';
-import { flushQueue } from './api.js';
+import { flushQueue, send } from './api.js';
 import * as A from './audio.js';
 
 const $ = (s, r = document) => r.querySelector(s);
@@ -55,6 +55,8 @@ async function boot() {
     onComplete() {
       $('.headline', intro).textContent = COPY.doneHeadline;
       $('.sub', intro).textContent = COPY.doneSub;
+      // already on the list? the button just takes them back to the storefront
+      claim.textContent = saved() ? COPY.backToStore : COPY.claim;
       claim.hidden = false;
       $('.aux').hidden = true;
       nudge.classList.remove('show');
@@ -78,8 +80,7 @@ async function boot() {
   });
 
   const openFlow = () => { A.unlock(); storeImg(); scene.pause(true); flow.open('q'); };
-  claim.addEventListener('click', openFlow);
-  $('.skip').addEventListener('click', openFlow);
+  claim.addEventListener('click', () => (saved() ? toStore(false) : openFlow()));
   auto.addEventListener('click', () => { A.unlock(); scene.autoplay(); });
 
   // sound toggle
@@ -115,22 +116,20 @@ async function boot() {
     await wipe(swap);
   }
 
-  $('.again').addEventListener('click', async () => {
-    await wipe(() => {
-      final.hidden = true; intro.hidden = false; dock.hidden = false;
-      $('.headline', intro).textContent = COPY.headline;
-      $('.sub', intro).textContent = COPY.sub;
-      $('.steps', intro).classList.remove('out');
-      claim.hidden = true; $('.aux').hidden = false;
-      // already signed up: the claim CTA becomes a quiet "you're set" link
-      scene.reset();
-    });
+  // Follow on the final screen (most people came from Instagram: send them back)
+  $('.final .ig').addEventListener('click', () => {
+    const id = (saved() || {}).id;
+    if (id) send({ type: 'update', id, instagramClicked: true }).catch(() => {});
   });
+
+  // the hint arrow must stay clear of the headline
+  const syncText = () => { scene.textBottom = intro.getBoundingClientRect().bottom; };
+  syncText();
 
   let rt;
   window.addEventListener('resize', () => {
     clearTimeout(rt);
-    rt = setTimeout(() => { if (scene.mode === 'store') layoutStore(); scene.resize(); }, 120);
+    rt = setTimeout(() => { if (scene.mode === 'store') layoutStore(); scene.resize(); syncText(); }, 120);
   });
 
   if (saved()) await toStore(true);

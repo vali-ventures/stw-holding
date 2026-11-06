@@ -15,7 +15,7 @@ export class Flow {
   constructor(root, scrim, hooks) {
     this.root = root; this.scrim = scrim; this.hooks = hooks;
     this.state = { id: null, interest: null, phone: '', email: '' };
-    this.steps = ['q', 'phone', 'email', 'ig'];
+    this.steps = ['q', 'phone', 'email'];
     this.cur = 'q';
     this._buildChoices();
     this._buildDigits();
@@ -27,6 +27,7 @@ export class Flow {
   open(step = 'q') {
     this.prevFocus = document.activeElement;
     this.root.hidden = false; this.scrim.hidden = false;
+    document.querySelectorAll('.top, .intro, .dock, .final, #stage').forEach((el) => el.setAttribute('inert', ''));
     this._show(step, true);
     requestAnimationFrame(() => requestAnimationFrame(() => { this.root.classList.add('show'); this.scrim.classList.add('show'); }));
     this.root.querySelector('.close').focus({ preventScroll: true });
@@ -34,7 +35,9 @@ export class Flow {
   close(done = false) {
     this.root.classList.remove('show'); this.scrim.classList.remove('show');
     document.activeElement && document.activeElement.blur();
+    document.querySelectorAll('[inert]').forEach((el) => el.removeAttribute('inert'));
     setTimeout(() => { this.root.hidden = true; this.scrim.hidden = true; }, 520);
+    if (!done && this.prevFocus && this.prevFocus.focus) this.prevFocus.focus({ preventScroll: true });
     this.hooks.onClose && this.hooks.onClose(done || !!this.state.saved);
   }
 
@@ -49,7 +52,7 @@ export class Flow {
       this.root.querySelectorAll('.pips i').forEach((p, k) => { p.classList.toggle('on', k <= i); p.classList.toggle('cur', k === i); });
       this.root.querySelector('.sheet-inner').scrollTop = 0;
       if (name === 'phone') setTimeout(() => this.phoneInput.focus({ preventScroll: true }), instant ? 380 : 60);
-      if (name === 'email') setTimeout(() => this.root.querySelector('#email').focus({ preventScroll: true }), 80);
+      // don't pop the keyboard for an optional field — let them choose
     };
     if (prev && prev !== next && !instant && !prev.hidden) {
       prev.classList.add('leaving');
@@ -72,7 +75,16 @@ export class Flow {
         clearTimeout(this._adv);
         this._adv = setTimeout(() => this._show('phone'), 340);
       });
+      b.tabIndex = box.children.length ? -1 : 0;
       box.appendChild(b);
+    });
+    box.addEventListener('keydown', (e) => {
+      const all = [...box.children], i = all.indexOf(document.activeElement);
+      const d = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[e.key];
+      if (d == null || i < 0) return;
+      e.preventDefault();
+      const n = all[(i + d + all.length) % all.length];
+      all.forEach((c) => (c.tabIndex = c === n ? 0 : -1)); n.focus();
     });
   }
 
@@ -91,8 +103,8 @@ export class Flow {
   }
 
   _digits(v) {
-    let d = (v || '').replace(/\D/g, '');
-    if (d.length === 11 && d[0] === '1') d = d.slice(1); // autofill gives +1…
+    let d = String(v || '').replace(/\D/g, '');
+    if (d.length >= 11 && d[0] === '1') d = d.slice(1); // autofill/paste gives +1…
     return d.slice(0, 10);
   }
 
@@ -104,9 +116,10 @@ export class Flow {
       s.classList.toggle('filled', !!ch);
       s.classList.toggle('cur', i === Math.min(d.length, 9) && d.length < 10);
     });
-    const full = d.length === 10;
-    this.phoneLabel.classList.toggle('full', full);
-    this.root.querySelector('.send').disabled = !full;
+    const full = d.length === 10, ok = full && this._validPhone(d);
+    this.phoneLabel.classList.toggle('full', ok);
+    this.phoneInput.setAttribute('aria-invalid', String(full && !ok));
+    this.root.querySelector('.send').disabled = !ok;
   }
 
   _validPhone(d) {
@@ -118,7 +131,18 @@ export class Flow {
     const R = this.root;
     R.querySelector('.close').addEventListener('click', () => this.close());
     this.scrim.addEventListener('click', () => this.close());
-    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !R.hidden) this.close(); });
+    document.addEventListener('keydown', (e) => {
+      if (R.hidden) return;
+      if (e.key === 'Escape') return this.close();
+      if (e.key === 'Tab') {
+        // keep focus inside the dialog
+        const f = [...R.querySelectorAll('button:not([disabled]), a[href], input:not(.hp)')].filter((el) => el.offsetParent && !el.closest('[hidden]'));
+        if (!f.length) return;
+        const i = f.indexOf(document.activeElement);
+        if (e.shiftKey && i <= 0) { e.preventDefault(); f[f.length - 1].focus(); }
+        else if (!e.shiftKey && i === f.length - 1) { e.preventDefault(); f[0].focus(); }
+      }
+    });
 
     const inp = this.phoneInput, lab = this.phoneLabel, err = R.querySelector('#phone-err');
     inp.addEventListener('focus', () => { lab.classList.add('focus'); this._renderPhone(); });
@@ -140,7 +164,11 @@ export class Flow {
       }
     });
     // keep caret at the end; no mid-string editing weirdness
-    inp.addEventListener('keydown', () => requestAnimationFrame(() => { try { inp.setSelectionRange(inp.value.length, inp.value.length); } catch {} }));
+    inp.addEventListener('keydown', (e) => {
+      if (['ArrowLeft', 'ArrowRight', 'Home', 'End', 'ArrowUp', 'ArrowDown'].includes(e.key)) e.preventDefault();
+      if (e.key === 'Enter' && this.state.phone.length < 10) { e.preventDefault(); this._phoneErr(COPY.phoneIncomplete); }
+      requestAnimationFrame(() => { try { inp.setSelectionRange(inp.value.length, inp.value.length); } catch {} });
+    });
 
     R.querySelector('form[data-step="phone"]').addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -153,7 +181,7 @@ export class Flow {
         await send({
           type: 'signup', id: this.state.id, phone: '+1' + d, interest: this.state.interest,
           consent: { sms: true, version: CONFIG.consentVersion },
-          company: R.querySelector('.hp').value || undefined, // honeypot
+          company: R.querySelector('.hp').value || undefined, // honeypot (field is named sw_hp so autofill leaves it alone)
         });
         this.state.saved = true;
         this.hooks.onSaved && this.hooks.onSaved({ id: this.state.id, last4: d.slice(-4) });
@@ -162,7 +190,7 @@ export class Flow {
       } catch (ex) {
         this._phoneErr(ex.message === 'invalid' || ex.field === 'phone' ? null : 'Something went wrong — try again in a sec.');
       } finally {
-        btn.textContent = COPY.phoneCta; btn.disabled = this.state.phone.length !== 10;
+        btn.textContent = COPY.phoneCta; btn.disabled = !(this.state.phone.length === 10 && this._validPhone(this.state.phone));
       }
     });
 
@@ -172,7 +200,7 @@ export class Flow {
     R.querySelector('form[data-step="email"]').addEventListener('submit', (e) => {
       e.preventDefault();
       const v = em.value.trim();
-      if (!v) return this._show('ig');
+      if (!v) return this.close(true);
       if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v)) {
         emErr.textContent = COPY.emailInvalid; em.classList.remove('bad'); void em.offsetWidth; em.classList.add('bad'); A.haptic(30);
         return;
@@ -181,16 +209,9 @@ export class Flow {
       em.blur();
       send({ type: 'update', id: this.state.id, email: v }).catch(() => {});
       A.tick();
-      this._show('ig');
+      this.close(true);
     });
-    R.querySelector('.skip-email').addEventListener('click', () => { em.blur(); this._show('ig'); });
-
-    // step 4
-    R.querySelector('.step[data-step="ig"] .ig').addEventListener('click', () => {
-      if (this.state.id) send({ type: 'update', id: this.state.id, instagramClicked: true }).catch(() => {});
-      setTimeout(() => this.close(true), 600);
-    });
-    R.querySelector('.finish').addEventListener('click', () => this.close(true));
+    R.querySelector('.skip-email').addEventListener('click', () => { em.blur(); this.close(true); });
   }
 
   _phoneErr(msg) {

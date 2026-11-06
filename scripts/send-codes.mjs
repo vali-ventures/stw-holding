@@ -14,7 +14,7 @@ import { sendSms } from '../lib/signup.js';
 const SEND = process.argv.includes('--send');
 const limit = Number((process.argv.find((a) => a.startsWith('--limit=')) || '').split('=')[1] || process.argv[process.argv.indexOf('--limit') + 1]) || Infinity;
 const TEMPLATE = process.env.FIRST_POUR_TEXT ||
-  "Saintwood: we're open. Your First Pour is on us — show this text at the counter any day this week. Code {code}. Reply STOP to opt out.";
+  "Saintwood: we're open. Your free coffee is on us. Show this text at the counter any day this week. Code {code}. Reply STOP to opt out.";
 
 const sentLog = 'data/sent.jsonl';
 const already = new Set((await fs.readFile(sentLog, 'utf8').catch(() => '')).split('\n').filter(Boolean).map((l) => JSON.parse(l).phone));
