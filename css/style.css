@@ -347,6 +347,19 @@ body.is-loading .view, body.is-loading .top { opacity: 0; }
 .top, .view { transition: opacity .6s var(--ease), transform .6s var(--ease); }
 
 /* ── Larger screens ─────────────────────────────────── */
+/* very large screens: type and controls grow with the scene */
+@media (min-width: 1800px) and (min-height: 1100px) {
+  .wordmark { width: 240px; }
+  .brand-sub { font-size: 12.5px; }
+  .headline { font-size: 78px; }
+  .sub { font-size: 22px; max-width: 40ch; }
+  .steps { font-size: 13.5px; }
+  .steps .box { width: 15px; height: 15px; }
+  .btn { height: 62px; font-size: 18px; padding: 0 34px; }
+  .claim { height: 66px; font-size: 19px; }
+  .link { font-size: 16px; }
+  .addr { font-size: 12px; }
+}
 @media (min-width: 720px) and (min-height: 560px) {
   .sheet {
     left: 50%; right: auto; bottom: auto; top: 50%; width: 460px;

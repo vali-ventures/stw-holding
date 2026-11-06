@@ -61,7 +61,7 @@ export class Scene {
     if (this.mode === 'store') return this._layoutStore();
 
     const portrait = H > W;
-    const hc = clamp(Math.min(W * (portrait ? 0.315 : 0.22), H * (portrait ? 0.21 : 0.27)), 70, 270);
+    const hc = clamp(Math.min(W * (portrait ? 0.315 : 0.22), H * (portrait ? 0.21 : 0.27)), 70, 380);
     this._build(hc);
     this.depth = hc * 0.62;
     this.gt = Math.round(Math.min(H * (portrait ? 0.68 : 0.65), H - this.depth - (portrait ? 128 : 104))); // ground top
@@ -255,7 +255,8 @@ export class Scene {
     if (q.kind === 'lid' && this._lidOverCup(p)) {
       const [, sy] = this._seat();
       if (p.y >= sy - 2) return this._snapLid(); // let go on/below the rim: it pops on
-      p.dropping = true; p.vx *= 0.15; p.x = lerp(p.x, this._seat()[0], 0.5); // above the rim: it falls onto it
+      // above the rim: it drops straight down onto it (no fling from a fast-moving finger or mouse)
+      p.dropping = true; p.vx = 0; p.vy = Math.max(0, p.vy) * 0.3; p.x = lerp(p.x, this._seat()[0], 0.85);
     }
     if (q.kind === 'sleeve' && p.threaded) { p.sliding = true; p.sv = Math.min(0, p.sv); return; }
     if (q.kind === 'sleeve' && this._dropSleeve(p)) return;
@@ -1046,11 +1047,11 @@ export class Scene {
     const ar = img.naturalWidth / img.naturalHeight;
     const top = this.storeTop || H * 0.3;
     const bottom = H - (this.storeBottom || 24);
-    let iw = Math.min(W - 24, 820, (bottom - top) * ar);
+    let iw = Math.min(W - 24, Math.max(820, H * 0.85), (bottom - top) * ar);
     const ih = iw / ar;
     const ix = (W - iw) / 2, iy = top + Math.max(0, (bottom - top - ih) * 0.45);
     this.storeBox = { x: ix, y: iy, w: iw, h: ih };
-    const hc = clamp(iw * 0.1, 40, 110);
+    const hc = clamp(iw * 0.1, 40, 150);
     this._build(hc);
     this.gt = iy + ih * 0.895; this.depth = ih * 0.07;
     if (!this.pieces) this._spawn();

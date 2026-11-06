@@ -1,15 +1,25 @@
-// Mobile regression suite (real touch input on iPhone 13, iPhone SE, Pixel 7, Instagram iOS).
-// Run: node server/dev.js  then  OUT=/tmp/shots node scripts/test-mobile.cjs   (needs Playwright + Chromium)
+// Regression suite: plays the game end to end. Phones use real touch input (iPhone 13, iPhone SE,
+// Pixel 7, Instagram iOS); desktops use a real mouse (1024 to 2560 wide).
+// Run: node server/dev.js, then: SUITE=all OUT=/tmp/shots node scripts/test-mobile.cjs  (mobile | desktop | all)
 // Mobile test suite — real touch input (Chromium CDP touch events), mobile devices.
 const { chromium, devices } = require('playwright');
 const OUT = process.env.OUT, URL = process.env.URL || 'http://localhost:5173/';
 const IG_IOS = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/22B83 Instagram 356.0.0.24.84 (iPhone14,5; iOS 18_1; en_US; en; scale=3.00; 1170x2532; 657224327)';
-const DEVICES = {
+const MOBILE = {
   'iPhone 13': { ...devices['iPhone 13'] },
   'iPhone SE': { ...devices['iPhone SE'] },
   'Pixel 7': { ...devices['Pixel 7'] },
   'Instagram iOS': { viewport: { width: 390, height: 664 }, isMobile: true, hasTouch: true, userAgent: IG_IOS },
 };
+const DESKTOP = {
+  'Desktop 1280': { viewport: { width: 1280, height: 720 } },
+  'Desktop 1440': { viewport: { width: 1440, height: 900 } },
+  'Desktop 1920': { viewport: { width: 1920, height: 1080 } },
+  'Desktop 2560': { viewport: { width: 2560, height: 1440 } },
+  'Laptop 1024': { viewport: { width: 1024, height: 768 } },
+};
+// SUITE=mobile (default) | desktop | all
+const DEVICES = { ...(process.env.SUITE !== 'desktop' ? MOBILE : {}), ...(process.env.SUITE === 'desktop' || process.env.SUITE === 'all' ? DESKTOP : {}) };
 const results = [];
 const check = (dev, name, ok, detail = '') => { results.push({ dev, name, ok, detail }); console.log((ok ? 'pass ' : 'FAIL ') + dev + ' | ' + name + (detail ? '  — ' + detail : '')); };
 
@@ -23,7 +33,14 @@ const check = (dev, name, ok, detail = '') => { results.push({ dev, name, ok, de
     await p.route('**/api/signup', (r) => { posts.push(r.request().postDataJSON()); r.fulfill({ status: 200, contentType: 'application/json', body: '{"ok":true,"id":"t"}' }); });
     await p.goto(URL); await p.evaluate(() => localStorage.clear()); await p.reload(); await p.waitForTimeout(1300);
     const cdp = await ctx.newCDPSession(p);
-    const touch = (type, x, y) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: type === 'touchEnd' ? [] : [{ x, y, id: 1 }] });
+    const isTouch = !!cfg.hasTouch;
+    let mx = 0, my = 0;
+    const touch = async (type, x, y) => {
+      if (isTouch) return cdp.send('Input.dispatchTouchEvent', { type, touchPoints: type === 'touchEnd' ? [] : [{ x, y, id: 1 }] });
+      if (type === 'touchStart') { mx = x; my = y; await p.mouse.move(x, y); return p.mouse.down(); }
+      if (type === 'touchMove') { mx = x; my = y; return p.mouse.move(x, y); }
+      return p.mouse.up();
+    };
     const drag = async (path, { hold = 0, steps = 10, wait = 900, frame = 16 } = {}) => {
       await touch('touchStart', path[0][0], path[0][1]);
       for (let i = 1; i < path.length; i++) {
@@ -70,6 +87,7 @@ const check = (dev, name, ok, detail = '') => { results.push({ dev, name, ok, de
     s = await S(); check(dev, 'shaking a lidded cup: no spill', Math.abs(s.fill - lidded) < 0.005 && s.lid, `fill ${lidded.toFixed(2)} → ${s.fill.toFixed(2)}`);
     check(dev, 'done → claim button', s.done && await p.isVisible('.claim'), `ticks=${s.ticks}`);
     await p.screenshot({ path: `${OUT}/${dev.replace(/ /g, '_')}-done.png` });
+    if (!isTouch) { await p.mouse.move(5, 5); }
 
     // ── C. edges: fling pieces at the walls, then check they settle fully on screen with no jitter
     g = await G();
@@ -83,14 +101,29 @@ const check = (dev, name, ok, detail = '') => { results.push({ dev, name, ok, de
     check(dev, 'flung press settles on screen', ext.every((e) => e.l >= -1 && e.r <= e.W + 1), JSON.stringify(ext.map((e) => `${e.k}:${Math.round(e.l)}..${Math.round(e.r)}/${e.W}`)));
     check(dev, 'no jitter at the edges', jitter < 0.5, `max drift ${jitter.toFixed(2)}px`);
 
+    if (!isTouch) {
+      // hover cursor over a piece, keyboard path to the claim button, Escape closes the card
+      g = await G(); await p.mouse.move(g.pr[0], g.pr[1]); await p.waitForTimeout(100);
+      check(dev, 'hand cursor over a piece', await p.evaluate(() => document.getElementById('stage').style.cursor === 'grab'));
+      await p.mouse.move(5, 5);
+      // focus moves to the claim button when the cup is ready; otherwise it's a few Tabs away
+      let focusedClaim = false;
+      for (let i = 0; i < 6 && !focusedClaim; i++) { focusedClaim = await p.evaluate(() => !!document.activeElement && document.activeElement.classList.contains('claim')); if (!focusedClaim) await p.keyboard.press('Tab'); }
+      check(dev, 'claim reachable by keyboard (Tab)', focusedClaim);
+      await p.focus('.claim'); await p.keyboard.press('Enter'); await p.waitForTimeout(800);
+      const card = await p.evaluate(() => { const r = document.querySelector('.sheet').getBoundingClientRect(); return { cx: Math.round(r.left + r.width / 2), cy: Math.round(r.top + r.height / 2), w: Math.round(r.width), W: innerWidth, H: innerHeight }; });
+      check(dev, 'signup opens as a centred card', Math.abs(card.cx - card.W / 2) < 3 && Math.abs(card.cy - card.H / 2) < 40 && card.w <= 480, JSON.stringify(card));
+      await p.keyboard.press('Escape'); await p.waitForTimeout(700);
+      check(dev, 'Escape closes it and returns focus', await p.evaluate(() => document.querySelector('.sheet').hidden && document.activeElement.classList.contains('claim')));
+    }
     // ── D. signup with the keyboard up
     if (!(await p.isVisible('.claim'))) { check(dev, 'reached claim', false, JSON.stringify(await S())); await ctx.close(); continue; }
     await p.click('.claim'); await p.waitForTimeout(800);
     await p.click('.choice[data-value="coffee"]'); await p.waitForTimeout(900);
-    const vp = cfg.viewport; await p.setViewportSize({ width: vp.width, height: Math.round(vp.height * 0.58) }); await p.waitForTimeout(400);
+    const vp = cfg.viewport; if (isTouch) { await p.setViewportSize({ width: vp.width, height: Math.round(vp.height * 0.58) }); await p.waitForTimeout(400); }
     await p.keyboard.type('7025550142', { delay: 30 }); await p.waitForTimeout(400);
     const sendOk = await p.evaluate(() => { const r = document.querySelector('.send').getBoundingClientRect(); return !document.querySelector('.send').disabled && r.bottom <= innerHeight && r.top >= 0; });
-    check(dev, 'phone step usable with keyboard up', sendOk);
+    check(dev, isTouch ? 'phone step usable with keyboard up' : 'phone step: typed number enables Send', sendOk);
     await p.setViewportSize(vp); await p.waitForTimeout(400);
     await p.click('.send'); await p.waitForTimeout(1200);
     await p.fill('#email', 'qa@example.com'); await p.click('.add'); await p.waitForTimeout(2800);

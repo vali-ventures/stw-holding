@@ -93,7 +93,7 @@ Every word on the page lives in `js/config.js`. The SMS disclosure is versioned.
 
 ## Testing
 
-`scripts/test-mobile.cjs` plays the game with real touch input on four phone profiles (iPhone 13, iPhone SE, Pixel 7, Instagram's in-app browser): any-order building, lid/sleeve on and off, pouring onto the lid, shake-to-spill, pieces flung at the screen edges, and the full signup with the keyboard up. It answers the signup API itself, so nothing is written to the real database.
+`scripts/test-mobile.cjs` plays the game with real touch input on four phone profiles (iPhone 13, iPhone SE, Pixel 7, Instagram's in-app browser) and with a real mouse on five desktop sizes (1024 to 2560 wide; set `SUITE=desktop` or `SUITE=all`): any-order building, lid/sleeve on and off, pouring onto the lid, shake-to-spill, pieces flung at the screen edges, and the full signup with the keyboard up. It answers the signup API itself, so nothing is written to the real database.
 
 ```bash
 node server/dev.js
