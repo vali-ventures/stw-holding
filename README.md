@@ -91,6 +91,18 @@ Edit the message with `FIRST_POUR_TEXT="… {code} …"`. Run the scripts with t
 
 Every word on the page lives in `js/config.js`. The SMS disclosure is versioned. **If you change `smsDisclosure`, bump `consentVersion`.** The server stores the exact wording each person agreed to; keep the old version's text in `CONSENT` in `lib/signup.js`. Have counsel review the disclosure, `sms-terms.html` and `privacy.html` before launch. For US texting you'll also need to register the number or brand for A2P 10DLC (or use a verified toll-free number) in Twilio.
 
+## Testing
+
+`scripts/test-mobile.cjs` plays the game with real touch input on four phone profiles (iPhone 13, iPhone SE, Pixel 7, Instagram's in-app browser): any-order building, lid/sleeve on and off, pouring onto the lid, shake-to-spill, pieces flung at the screen edges, and the full signup with the keyboard up. It answers the signup API itself, so nothing is written to the real database.
+
+```bash
+node server/dev.js
+```
+
+```bash
+OUT=/tmp/shots node scripts/test-mobile.cjs
+```
+
 ## Notes
 
 - US numbers only (10-digit NANP). The phone field accepts typing, paste and autofill (`+1 (702) 555-0123` works).
