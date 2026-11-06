@@ -142,7 +142,6 @@ body.dragging, body.dragging #stage { cursor: grabbing !important; }
 .steps li.on .box { background: var(--forest); transform: scale(1.08); }
 .steps li.on .box::after { transform: rotate(45deg) scale(1); }
 .steps li.on > span:last-child { opacity: .5; }
-.steps li.next > span:last-child { text-decoration: underline; text-underline-offset: 4px; text-decoration-thickness: 1.2px; }
 
 .nudge {
   position: absolute; z-index: 2; left: 0; right: 0; margin: 0; padding: 0 var(--gutter);

@@ -38,15 +38,13 @@ async function boot() {
   let nudgeT, peeks = -1;
 
   const scene = window.__scene = new Scene($('#stage'), {
-    nudgeKeys: ['nudgeLidFirst', 'nudgeEmpty'],
+    nudgeKeys: ['nudgeEmpty'],
     onGrab() { document.body.classList.add('dragging'); },
     onRelease() { document.body.classList.remove('dragging'); },
     onProgress(st) {
-      const next = !st.pour ? 'pour' : !st.sleeve ? 'sleeve' : !st.lid ? 'lid' : null;
       $$('.steps li').forEach((li) => {
         const k = li.dataset.step;
         li.classList.toggle('on', !!st[k]);
-        li.classList.toggle('next', k === next);
       });
     },
     onNudge(key) {

@@ -24,7 +24,6 @@ export const COPY = {
   autoplay: 'Make it for me',
 
   // Gentle nudges when things go sideways
-  nudgeLidFirst: 'Lid goes on last.',
   nudgeEmpty: 'Set the press down to refill.',
 
   doneHeadline: 'Your cup is ready.',

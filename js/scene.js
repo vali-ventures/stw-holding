@@ -201,7 +201,9 @@ export class Scene {
     const p = this.pieces[k];
     if (k === 'sleeve' && (p.attached || p.threaded)) {
       // pulling the sleeve along the cup axis
+      const was = p.attached;
       p.attached = false; p.threaded = true; p.sliding = false;
+      if (was) this._progress();
       this.ptr.mode = 'thread'; this.ptr.offS = p.s - (this.pieces.cup.y - y);
     } else {
       if (k === 'lid' && p.attached) { const [lx, ly] = this._seat(); p.x = lx; p.y = ly; p.attached = false; }
@@ -250,9 +252,10 @@ export class Scene {
     if (q.mode === 'sleeve?') return;
     const p = P0[q.kind];
     p.held = false;
-    if (q.kind === 'lid' && this._lidMagnet()) {
+    if (q.kind === 'lid' && this._lidOverCup(p)) {
       const [, sy] = this._seat();
-      if (p.y > sy - this.hc * 0.35) return this._snapLid();
+      if (p.y >= sy - 2) return this._snapLid(); // let go on/below the rim: it pops on
+      p.dropping = true; // above the rim: it falls onto it (see _step)
     }
     if (q.kind === 'sleeve' && p.threaded) { p.sliding = true; p.sv = Math.min(0, p.sv); return; }
     if (q.kind === 'sleeve' && this._dropSleeve(p)) return;
@@ -272,6 +275,13 @@ export class Scene {
     if (s.attached || s.threaded) return [c.x + Math.sin(c.a) * s.s, c.y - Math.cos(c.a) * s.s];
     return [s.x, s.y - this.g.sleeveH / 2];
   }
+  // lid lined up with the cup, anywhere from well above the rim down to the cup's base
+  _lidOverCup(l) {
+    const c = this.pieces.cup;
+    if (l.attached || c.held) return false;
+    const [sx, sy] = this._seat();
+    return Math.abs(l.x - sx) < this.g.rx * 0.9 && l.y > sy - this.hc * 2.5 && l.y < c.y - this.hc * 0.1;
+  }
   _lidMagnet() {
     const l = this.pieces.lid, c = this.pieces.cup;
     if (l.attached) return false;
@@ -284,7 +294,6 @@ export class Scene {
     c.lidOff = -this.hc * 0.05; c.lidOffV = this.hc * 4;
     c.squash = 0; c.squashV = 0.9;
     A.lidClick(); A.haptic(14);
-    if (c.fill < FULL) this._nudge('lid', 'nudgeLidFirst');
     // overfilled? a little geyser out of the sip hole
     if (c.fill > 0.97) {
       const [sx, sy] = this._seat();
@@ -381,8 +390,15 @@ export class Scene {
       } else if (!(k === 'sleeve' && (p.threaded))) {
         // free: gravity, settle on the counter
         const gy = groundOf(p);
+        const py0 = p.y;
         p.vy += this.grav * dt;
         p.x += p.vx * dt; p.y += p.vy * dt;
+        // a lid falling (or tossed) onto the cup lands on the rim and clicks on
+        if (k === 'lid' && this.mode === 'bench' && !p.attached) {
+          const [sx, sy] = this._seat();
+          if (py0 <= sy && p.y >= sy && Math.abs(p.x - sx) < this.g.rx * 0.9 && !cup.held) { p.x = sx; p.y = sy; p.dropping = false; this._snapLid(); continue; }
+          if (p.dropping && p.y >= gy) p.dropping = false;
+        }
         if (p.y >= gy) {
           if (p.vy > this.hc * 3) { A.thud(Math.min(1, p.vy / (this.hc * 14))); if (k === 'cup') this._jolt(p.vy); }
           p.y = gy; p.vy = p.vy > this.hc * 3 ? -p.vy * 0.22 : 0;
@@ -400,13 +416,27 @@ export class Scene {
 
     // pieces left touching the cup ease apart so the finished shot stays clean
     if (this.mode === 'bench' && !cup.held) {
-      for (const k of ['press', 'lid', 'sleeve']) {
+      for (const k of ['press']) {
         const p = this.pieces[k];
         if (p.held || p.attached || p.threaded) continue;
         const half = k === 'press' ? this.pg.gw / 2 + (p.face > 0 ? 4 : this.pg.handle) : k === 'lid' ? this.g.lidW / 2 : this.g.tw / 2;
         const need = this.g.tw / 2 + half + 6, dx = p.x - cup.x;
         if (Math.abs(dx) < need && Math.abs(p.y - cup.y) < this.depth * 1.5 && p.y >= (p.groundY ?? p.y) - 1) {
           p.x += Math.sign(dx || (p.x < this.W / 2 ? -1 : 1)) * Math.min(need - Math.abs(dx), 260 * dt);
+        }
+      }
+    }
+    // loose pieces resting on the counter never pile up on each other (the cup is
+    // left out: anything dropped on it should go on, not get pushed away)
+    if (this.mode === 'bench') {
+      const free = ['press', 'lid', 'sleeve'].map((k) => this.pieces[k]).filter((p) => !p.held && !p.attached && !p.threaded && !p.dropping && p.y >= (p.groundY ?? p.y) - 1);
+      const half = (p) => p.kind === 'press' ? this.pg.gw / 2 + this.pg.handle * 0.6 : p.kind === 'lid' ? this.g.lidW / 2 : this.g.tw / 2;
+      for (let i = 0; i < free.length; i++) for (let j = i + 1; j < free.length; j++) {
+        const a = free[i], b = free[j], dx = b.x - a.x, need = half(a) + half(b) + 4;
+        if (Math.abs(dx) < need && Math.abs(b.y - a.y) < this.depth * 0.9) {
+          const push = Math.min(need - Math.abs(dx), 240 * dt) / 2, dir = Math.sign(dx) || 1;
+          a.x = clamp(a.x - dir * push, half(a), this.W - half(a));
+          b.x = clamp(b.x + dir * push, half(b), this.W - half(b));
         }
       }
     }
@@ -447,8 +477,9 @@ export class Scene {
   _dropSleeve(p) {
     const c = this.pieces.cup, g = this.g;
     const s = c.y - (p.y - g.sleeveH / 2);
-    if (Math.abs(p.x - c.x) < g.rx * 0.7 && s > g.sleeveY && s < this.hc + g.sleeveH * 1.4 && !c.held) {
-      p.threaded = true; p.sliding = true; p.s = Math.min(s, this.hc + g.sleeveH * 0.3); p.sv = Math.min(0, -p.vy * 0.3);
+    if (Math.abs(p.x - c.x) < g.rx * 0.9 && s > -g.sleeveH * 0.3 && s < this.hc + g.sleeveH * 1.4 && !c.held) {
+      p.threaded = true; p.sliding = true; p.s = clamp(s, 0, this.hc + g.sleeveH * 0.3);
+      p.sv = p.s > g.sleeveY ? Math.min(0, -p.vy * 0.3) : 0;
       A.tick();
       return true;
     }
@@ -476,11 +507,17 @@ export class Scene {
       p.s = lerp(p.s, s, Math.min(1, dt * 30));
       p.held = true;
     } else if (p.sliding) {
-      // released on the cup: it slides down under its own weight with friction
-      p.sv -= this.grav * 0.35 * dt;
-      p.sv *= Math.pow(0.08, dt);
-      p.s += p.sv * dt;
-      if (p.s <= snug) {
+      if (p.s < snug - 0.5) {
+        // dropped low on the cup: it gets pushed up into place
+        p.s += (snug - p.s) * Math.min(1, dt * 9) + 0.3;
+        if (p.s > snug) p.s = snug;
+      } else {
+        // dropped high: it slides down under its own weight with friction
+        p.sv -= this.grav * 0.35 * dt;
+        p.sv *= Math.pow(0.08, dt);
+        p.s += p.sv * dt;
+      }
+      if (p.s <= snug + 0.01 && (p.sv <= 0 || p.s >= snug - 0.5)) {
         p.s = snug; p.sliding = false; p.threaded = false; p.attached = true; p.held = false;
         p.squeeze = 1;
         A.sleeveSeat(); A.haptic(8);
@@ -545,7 +582,6 @@ export class Scene {
       for (let i = 0; i < n; i++) this._emit(wx + (Math.random() - 0.5) * 1.5, wy, dx * H * 0.6 + p.vx * 0.4, dy * H * 0.6 + p.vy * 0.4, dv / n, 1);
       const intoCup = !this.pieces.lid.attached && Math.abs(wx - c.x) < g.rx;
       A.pour(Math.min(1, p.rate * 1.6), c.fill, intoCup);
-      if (this.pieces.lid.attached && Math.abs(wx - c.x) < g.rx * 1.2) this._nudge('lid', 'nudgeLidFirst');
     } else A.pour(0);
     if (p.vol <= 0.02 && Math.abs(p.tilt) > 1 && this.pieces.cup.fill < FULL) this._nudge('empty', 'nudgeEmpty');
   }
@@ -701,13 +737,7 @@ export class Scene {
     if (force || key !== this._pkey) { this._pkey = key; this.hooks.onProgress && this.hooks.onProgress(st); }
   }
 
-  next() {
-    const { cup, lid, sleeve } = this.pieces;
-    if (cup.fill < FULL) return lid.attached ? 'lid' : 'press';
-    if (!sleeve.attached) return 'sleeve';
-    if (!lid.attached) return 'lid';
-    return null;
-  }
+
 
   // ── rendering ─────────────────────────────────────────────
   _render() {
@@ -728,7 +758,6 @@ export class Scene {
     list.push({ z: cup.held ? 1e5 : cup.y + 0.5, f: () => this._drawCup(x) });
     list.sort((a, b) => a.z - b.z).forEach((it) => it.f());
     this._drawParticles(x);
-    if (this.mode === 'bench') this._drawHint(x);
     if (this.mode === 'store') this._drawStoreFg(x);
   }
 
@@ -887,28 +916,6 @@ export class Scene {
       liveLine(x, pts, P.ink, 1.1, 0.35 * Math.sin(ph * Math.PI), k);
     }
     x.restore();
-  }
-
-  // the arrow — a nod to the arrow on the papered window
-  _drawHint(x) {
-    if (this.done || this.ptr || this.auto || this.idle < 1.1) return;
-    const k = this.next(); if (!k) return;
-    let tx, ty;
-    if (k === 'press') { const p = this.pieces.press; tx = p.x + this.pg.gw * 0.1 * p.face; ty = p.y - this.pg.gh - this.pg.cap - this.pg.rod - this.hc * 0.12; }
-    else if (k === 'sleeve') { const [sx, sy] = this._sleevePos(); tx = sx; ty = sy - this.g.sleeveH * 0.6; }
-    else { const l = this.pieces.lid; const [lx, ly] = l.attached ? this._seat() : [l.x, l.y]; tx = lx; ty = ly - this.hc * 0.16; }
-    const bob = Math.sin(this.t * 4) * 4;
-    const a = Math.min(1, (this.idle - 1.1) * 2);
-    const side = tx < this.W / 2 ? 1 : -1;
-    let p0 = [tx + side * this.hc * 0.55, ty - this.hc * 0.55 + bob];
-    const p1 = [tx + side * 4, ty - 6 + bob];
-    const ceil = (this.textBottom || 0) + 10;
-    if (p0[1] < ceil) p0 = [tx + side * this.hc * 0.75, Math.max(ceil, ty - this.hc * 0.2) + bob];
-    const pts = bezPts(p0, [p0[0] - side * this.hc * 0.05, p0[1] + this.hc * 0.3], [p1[0] + side * this.hc * 0.25, p1[1] - this.hc * 0.05], p1, 18);
-    liveLine(x, pts, P.ink, 2, 0.85 * a, 1);
-    const ang = Math.atan2(p1[1] - pts[15][1], p1[0] - pts[15][0]);
-    const h = 9;
-    liveLine(x, [[p1[0] - Math.cos(ang - 0.5) * h, p1[1] - Math.sin(ang - 0.5) * h], p1, [p1[0] - Math.cos(ang + 0.5) * h, p1[1] - Math.sin(ang + 0.5) * h]], P.ink, 2, 0.85 * a, 2);
   }
 
   // ── autoplay ("Make it for me") ───────────────────────────
