@@ -28,9 +28,10 @@ export class Flow {
     this.prevFocus = document.activeElement;
     this.root.hidden = false; this.scrim.hidden = false;
     document.querySelectorAll('.top, .intro, .dock, .final, #stage').forEach((el) => el.setAttribute('inert', ''));
+    this.openedAt = performance.now();
     this._show(step, true);
     requestAnimationFrame(() => requestAnimationFrame(() => { this.root.classList.add('show'); this.scrim.classList.add('show'); }));
-    this.root.querySelector('.close').focus({ preventScroll: true });
+    setTimeout(() => (this.root.querySelector('.choice') || this.root.querySelector('.close')).focus({ preventScroll: true }), 60);
   }
   close(done = false) {
     this.root.classList.remove('show'); this.scrim.classList.remove('show');
@@ -49,7 +50,6 @@ export class Flow {
       next.classList.remove('leaving');
       this.cur = name;
       const i = this.steps.indexOf(name);
-      this.root.querySelectorAll('.pips i').forEach((p, k) => { p.classList.toggle('on', k <= i); p.classList.toggle('cur', k === i); });
       this.root.querySelector('.sheet-inner').scrollTop = 0;
       if (name === 'phone') setTimeout(() => this.phoneInput.focus({ preventScroll: true }), instant ? 380 : 60);
       // don't pop the keyboard for an optional field — let them choose
@@ -130,7 +130,7 @@ export class Flow {
   _wire() {
     const R = this.root;
     R.querySelector('.close').addEventListener('click', () => this.close());
-    this.scrim.addEventListener('click', () => this.close());
+    this.scrim.addEventListener('click', () => { if (performance.now() - this.openedAt > 400) this.close(); });
     document.addEventListener('keydown', (e) => {
       if (R.hidden) return;
       if (e.key === 'Escape') return this.close();
@@ -188,7 +188,7 @@ export class Flow {
         A.chime(); A.haptic(16);
         this._show('email');
       } catch (ex) {
-        this._phoneErr(ex.message === 'invalid' || ex.field === 'phone' ? null : 'Something went wrong — try again in a sec.');
+        this._phoneErr(ex.message === 'invalid' || ex.field === 'phone' ? null : COPY.saveFailed);
       } finally {
         btn.textContent = COPY.phoneCta; btn.disabled = !(this.state.phone.length === 10 && this._validPhone(this.state.phone));
       }

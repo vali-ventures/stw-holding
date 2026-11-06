@@ -38,6 +38,9 @@ async function boot() {
   let nudgeT, peeks = -1;
 
   const scene = window.__scene = new Scene($('#stage'), {
+    nudgeKeys: ['nudgeLidFirst', 'nudgeEmpty'],
+    onGrab() { document.body.classList.add('dragging'); },
+    onRelease() { document.body.classList.remove('dragging'); },
     onProgress(st) {
       const next = !st.pour ? 'pour' : !st.sleeve ? 'sleeve' : !st.lid ? 'lid' : null;
       $$('.steps li').forEach((li) => {
@@ -59,13 +62,14 @@ async function boot() {
       claim.textContent = saved() ? COPY.backToStore : COPY.claim;
       claim.hidden = false;
       $('.aux').hidden = true;
-      nudge.classList.remove('show');
+      $('.steps', intro).classList.add('out');
+      nudge.classList.remove('show'); clearTimeout(nudgeT);
       setTimeout(() => claim.focus({ preventScroll: true }), 50);
     },
     onPeek() {
       const n = $('.peek-note');
       peeks = (peeks + 1) % COPY.peek.length;
-      n.textContent = COPY.peek[peeks];
+      n.textContent = COPY.peek;
       const t = scene.paper.tear;
       n.style.setProperty('--peek-y', (t.y - t.r * 2.6 - 28) + 'px');
       n.style.setProperty('--peek-x', t.x + 'px');
@@ -81,7 +85,7 @@ async function boot() {
 
   const openFlow = () => { A.unlock(); storeImg(); scene.pause(true); flow.open('q'); };
   claim.addEventListener('click', () => (saved() ? toStore(false) : openFlow()));
-  auto.addEventListener('click', () => { A.unlock(); scene.autoplay(); });
+  auto.addEventListener('click', async () => { A.unlock(); auto.disabled = true; try { await scene.autoplay(); } finally { auto.disabled = false; } });
 
   // sound toggle
   const snd = $('.sound');

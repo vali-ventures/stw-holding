@@ -201,7 +201,7 @@ export class Scene {
       this.ptr.offX = x - p.x; this.ptr.offY = y - p.y;
     }
     p.held = true; p.vx = p.vy = 0;
-    this.ptr.kind = k;
+    this.ptr.kind = k; this._grabbing = true;
     this.ptr.groundY = clamp(p.y, this.gt, this.gt + this.depth);
     if (k === 'cup') this.ptr.groundY = clamp(p.y, this.gt, this.gt + this.depth);
     this.hooks.onGrab && this.hooks.onGrab(k);
@@ -235,6 +235,7 @@ export class Scene {
   up() {
     const q = this.ptr; if (!q) return;
     this.ptr = null;
+
     const P0 = this.pieces;
     if (q.mode === 'pry') { P0.cup.lidOff = 0; return; }
     if (q.mode === 'sleeve?') return;
@@ -249,7 +250,7 @@ export class Scene {
     if (q.kind === 'sleeve') p._wasAbove = false;
     p.groundY = q.groundY;
     // a light toss keeps some momentum; clamp so it can't leave the screen
-    p.vx = clamp(p.vx, -2400, 2400); p.vy = clamp(p.vy, -2400, 2400);
+    p.vx = clamp(p.vx, -1600, 1600); p.vy = clamp(p.vy, -1600, 1600);
   }
 
   // ── geometry helpers ─────────────────────────────────────
@@ -274,6 +275,7 @@ export class Scene {
     c.lidOff = -this.hc * 0.05; c.lidOffV = this.hc * 4;
     c.squash = 0; c.squashV = 0.9;
     A.lidClick(); A.haptic(14);
+    if (c.fill < FULL) this._nudge('lid', 'nudgeLidFirst');
     // overfilled? a little geyser out of the sip hole
     if (c.fill > 0.97) {
       const [sx, sy] = this._seat();
@@ -317,6 +319,8 @@ export class Scene {
 
   _step(dt) {
     const { cup, press, lid, sleeve } = this.pieces;
+    // however a drag ends (release, snap, resize), tell the UI once
+    if (this._grabbing && !this.ptr) { this._grabbing = false; this.hooks.onRelease && this.hooks.onRelease(); }
     this.idle += dt;
     const q = this.ptr;
     const groundOf = (p) => p.groundY ?? clamp(p.y, this.gt, this.gt + this.depth);
@@ -365,6 +369,8 @@ export class Scene {
           p.y = gy; p.vy = p.vy > this.hc * 3 ? -p.vy * 0.22 : 0;
           p.vx *= Math.pow(0.0005, dt);
         }
+        const topY = k === 'press' ? this.pg.gh + this.pg.cap + this.pg.rod + 10 : k === 'cup' ? this.hc + this.g.ry + 10 : this.hc * 0.3 + 10;
+        if (p.y < topY) { p.y = topY; p.vy = Math.abs(p.vy) * 0.3; }
         const m = k === 'cup' ? this.g.tw / 2 : k === 'press' ? this.pg.gw / 2 + this.pg.handle + 4 : k === 'lid' ? this.g.lidW / 2 + 4 : this.g.tw / 2 + 4;
         if (p.x < m) { p.x = m; p.vx = Math.abs(p.vx) * 0.4; }
         if (p.x > this.W - m) { p.x = this.W - m; p.vx = -Math.abs(p.vx) * 0.4; }
@@ -373,6 +379,18 @@ export class Scene {
       }
     }
 
+    // pieces left touching the cup ease apart so the finished shot stays clean
+    if (this.mode === 'bench' && !cup.held) {
+      for (const k of ['press', 'lid', 'sleeve']) {
+        const p = this.pieces[k];
+        if (p.held || p.attached || p.threaded) continue;
+        const half = k === 'press' ? this.pg.gw / 2 + (p.face > 0 ? 4 : this.pg.handle) : k === 'lid' ? this.g.lidW / 2 : this.g.tw / 2;
+        const need = this.g.tw / 2 + half + 6, dx = p.x - cup.x;
+        if (Math.abs(dx) < need && Math.abs(p.y - cup.y) < this.depth * 1.5 && p.y >= (p.groundY ?? p.y) - 1) {
+          p.x += Math.sign(dx || (p.x < this.W / 2 ? -1 : 1)) * Math.min(need - Math.abs(dx), 260 * dt);
+        }
+      }
+    }
     this._stepPress(dt);
     this._stepSleeve(dt);
     this._stepCup(dt);
@@ -459,7 +477,7 @@ export class Scene {
     if (!p.held) {
       p.tilt = lerp(p.tilt, 0, Math.min(1, dt * 10));
       // run it dry, set it down, and a fresh pot brews (slowly fills back up)
-      if (p.vol < 0.05 && !p.brewing && Math.abs(p.tilt) < 0.05 && p.vy === 0) { p.brewing = true; this.hooks.onNudge && this.hooks.onNudge('nudgeBrew'); }
+      if (p.vol < 0.05 && !p.brewing && Math.abs(p.tilt) < 0.05 && p.vy === 0) { p.brewing = true; }
       if (p.brewing) { p.vol = Math.min(pg.capacity, p.vol + dt * 0.45); if (p.vol >= pg.capacity) p.brewing = false; }
       p.rate = 0; A.pour(0); return;
     }
@@ -571,7 +589,6 @@ export class Scene {
       const extra = c.fill - 1.0; c.fill = 1.0;
       const side = Math.random() < 0.5 ? -1 : 1;
       this._emit(c.x + side * g.rx * 0.97, c.y - H + 2, side * 20, 10, extra, 2);
-      this._nudge('over', 'nudgeSpill');
     }
     // lid seat spring + squash spring
     c.lidOffV += (-c.lidOff * 900 - c.lidOffV * 28) * dt; if (!this.ptr || this.ptr.mode !== 'pry') c.lidOff += c.lidOffV * dt;
@@ -628,8 +645,6 @@ export class Scene {
         sctx.restore();
         if (Math.random() < 0.08 && Q.f[i] !== 4) { this._emit(x, Q.g[i] - 1, (Math.random() - 0.5) * 160, -120 - Math.random() * 120, 0, 4); }
         this._splashSound();
-        if (this.spilled > 0.12 && this.mode === 'bench') this._nudge('spill', 'nudgeSpill');
-        if (this.spilled > 1.1 && this.mode === 'bench') this._nudge('flood', 'nudgeFlood');
         dead = true;
       }
       if (!dead && (x < -50 || x > this.W + 50 || y > this.H + 50)) dead = true;
@@ -642,7 +657,8 @@ export class Scene {
   _splashSound() { if (this.t - this.lastSplash > 0.09) { this.lastSplash = this.t; A.splash(); } }
 
   _nudge(key, copyKey) {
-    if (this.nudged[key] || this.auto) return;
+    if (this.nudged[key] || this.auto || this.done || this._doneT > 0 || this.mode !== 'bench') return;
+    if (!this.hooks.nudgeKeys || !this.hooks.nudgeKeys.includes(copyKey)) return;
     this.nudged[key] = true;
     this.hooks.onNudge && this.hooks.onNudge(copyKey);
   }
@@ -803,14 +819,15 @@ export class Scene {
     x.beginPath();
     let open = false;
     for (let i = 0; i < n; i++) {
-      const cont = i > 0 && Q.f[i] === 1 && Q.f[i - 1] === 1 && Math.abs(Q.x[i] - Q.x[i - 1]) + Math.abs(Q.y[i] - Q.y[i - 1]) < link;
+      const cont = i > 0 && (Q.f[i] === 1 || Q.f[i] === 2) && Q.f[i - 1] === Q.f[i] && Math.abs(Q.x[i] - Q.x[i - 1]) + Math.abs(Q.y[i] - Q.y[i - 1]) < link;
       if (cont) { if (!open) { x.moveTo(Q.x[i - 1], Q.y[i - 1]); open = true; } x.lineTo(Q.x[i], Q.y[i]); }
       else open = false;
     }
     x.stroke();
     // loose drops: small, round, slightly stretched by speed
     for (let i = 0; i < n; i++) {
-      const joined = (i > 0 && Q.f[i] === 1 && Q.f[i - 1] === 1) || (i < n - 1 && Q.f[i] === 1 && Q.f[i + 1] === 1);
+      const lk = Q.f[i] === 1 || Q.f[i] === 2;
+      const joined = lk && ((i > 0 && Q.f[i - 1] === Q.f[i]) || (i < n - 1 && Q.f[i + 1] === Q.f[i]));
       if (joined) continue;
       const r = Q.f[i] === 1 ? r0 * 0.8 : r0 * 0.6;
       const sp = Math.hypot(Q.vx[i], Q.vy[i]);
@@ -879,6 +896,7 @@ export class Scene {
       if (P0.lid.attached) { const [lx, ly] = this._seat(); this.down(lx, ly - H * 0.05, 'auto', 'lid'); await glide(lx, ly - H * 0.05, lx, ly - H * 0.5, 350); await glide(lx, ly - H * 0.5, this.home.lid[0], this.home.lid[1] - H * 0.4, 400); this.up(); await wait(400); }
       if (P0.cup.fill < FULL) {
         const p = P0.press, gx = p.x, gy = p.y - pg.base - pg.gh * 0.5;
+        if (p.vol < 1) { p.vol = pg.capacity; p.brewing = false; }
         this.down(gx, gy, 'auto', 'press');
         const c = P0.cup, f = c.x >= p.x ? 1 : -1;
         const tx = c.x - f * (pg.gh * 0.5 + H * 0.05), ty = c.y - H - H * 0.42;
@@ -887,7 +905,7 @@ export class Scene {
         const t0 = performance.now();
         let px0 = tx + ox;
         // steer like a person would: keep the stream landing mid-cup
-        while (c.fill < 0.7 && p.vol > 0.03 && performance.now() - t0 < 6000) {
+        while (c.fill < 0.7 && p.vol > 0.03 && performance.now() - t0 < 8000) {
           if (gen !== this._gen) throw new Error('layout changed');
           if (Math.abs(p.tilt) > 0.6) { const [sxw] = this._spoutWorld(); px0 += ((c.x - f * g.rx * 0.12) - sxw) * 0.12; this.move(px0, ty + oy); }
           await new Promise(requestAnimationFrame);
@@ -941,7 +959,7 @@ export class Scene {
     const bottom = H - (this.storeBottom || 24);
     let iw = Math.min(W - 24, 820, (bottom - top) * ar);
     const ih = iw / ar;
-    const ix = (W - iw) / 2, iy = bottom - ih;
+    const ix = (W - iw) / 2, iy = top + Math.max(0, (bottom - top - ih) * 0.45);
     this.storeBox = { x: ix, y: iy, w: iw, h: ih };
     const hc = clamp(iw * 0.1, 40, 110);
     this._build(hc);

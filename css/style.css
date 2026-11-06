@@ -80,13 +80,15 @@ a { color: inherit; }
   padding-left: .32em;
 }
 .sound {
-  position: absolute; right: calc(var(--gutter) - 10px); top: calc(var(--safe-t) + clamp(8px, 2vh, 20px));
+  /* vertically centred on the wordmark + subline block */
+  position: absolute; right: calc(var(--gutter) - 10px);
+  top: calc(var(--safe-t) + clamp(14px, 2.6vh, 26px) + (clamp(124px, 34vw, 196px) * .151 + 16px) / 2 - 22px);
   width: 44px; height: 44px; display: grid; place-items: center;
   border-radius: 50%; pointer-events: auto; color: var(--forest);
   transition: transform .2s var(--ease), background-color .2s;
 }
 .sound:active { transform: scale(.92); background: rgba(7, 34, 15, .06); }
-.sound svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+.sound svg { width: clamp(22px, 1.6vw, 26px); height: clamp(22px, 1.6vw, 26px); fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
 .sound .spk { fill: currentColor; stroke: none; }
 .sound .x { display: none; }
 .sound[aria-pressed="false"] .w1, .sound[aria-pressed="false"] .w2 { display: none; }
@@ -94,7 +96,10 @@ a { color: inherit; }
 
 /* ── Intro copy ─────────────────────────────────────── */
 .view { transition: opacity .5s var(--ease), transform .6s var(--ease); }
-.view.out { opacity: 0; transform: translateY(-8px); pointer-events: none; }
+.view.out, .steps.out { opacity: 0; transform: translateY(-8px); pointer-events: none; }
+.steps { transition: opacity .4s var(--ease), transform .5s var(--ease); }
+/* while a piece is being dragged, the copy steps back so art never fights text */
+body.dragging .intro { opacity: .12; transition: opacity .25s var(--ease); }
 
 .intro, .final {
   position: absolute; left: 0; right: 0; z-index: 2;
@@ -225,12 +230,7 @@ a { color: inherit; }
 }
 .sheet.kb .sheet-inner { padding-bottom: 16px; }
 .sheet-head { display: grid; grid-template-columns: 44px 1fr 44px; align-items: center; height: 44px; margin: 0 -10px 10px; }
-.sheet-head .pips { grid-column: 2; justify-content: center; }
 .sheet-head .close { grid-column: 3; }
-.pips { display: flex; gap: 6px; }
-.pips i { width: 18px; height: 3px; border-radius: 2px; background: rgba(40,52,39,.16); transition: background-color .4s, width .4s var(--ease); }
-.pips i.on { background: var(--forest); }
-.pips i.cur { width: 30px; }
 .close { width: 44px; height: 44px; display: grid; place-items: center; border-radius: 50%; color: var(--forest); }
 .close:active { background: rgba(7,34,15,.06); }
 .close svg { width: 20px; height: 20px; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; fill: none; }
@@ -369,6 +369,7 @@ body.is-loading .view, body.is-loading .top { opacity: 0; }
   .top { padding-top: calc(var(--safe-t) + 10px); }
   .wordmark { width: 120px; }
   .brand-sub { display: none; }
+  .sound { top: calc(var(--safe-t) + 10px + 9px - 22px + 9px); }
   .intro, .final { top: calc(var(--safe-t) + 46px); }
   .headline { font-size: 26px; max-width: none; }
   .sub { font-size: 13.5px; margin-top: 4px; max-width: 52ch; }
@@ -380,7 +381,7 @@ body.is-loading .view, body.is-loading .top { opacity: 0; }
   .addr { display: none; }
 }
 @media (max-height: 420px) {
-  .sub { display: none; }
+  .sub { white-space: normal; font-size: 13px; }
 }
 @media (max-height: 560px) {
   .sheet-inner { padding-top: 8px; }

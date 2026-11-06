@@ -19,19 +19,16 @@ export const CONFIG = {
 export const COPY = {
   // First screen: why you're here, in two lines.
   headline: 'Make a coffee, get a free one.',
-  sub: 'Build this cup, and your first coffee is free when we open.',
+  sub: 'Build this cup to get a free coffee opening week.',
   steps: { pour: 'Pour', sleeve: 'Sleeve', lid: 'Lid' },
   autoplay: 'Make it for me',
 
   // Gentle nudges when things go sideways
   nudgeLidFirst: 'Lid goes on last.',
-  nudgeSpill: 'Oops — a little spill.',
-  nudgeFlood: 'That was the whole pot. Set it down to refill.',
-  nudgeEmpty: 'Empty. Set it down to refill.',
-  nudgeBrew: 'Refilling…',
+  nudgeEmpty: 'Set the press down to refill.',
 
   doneHeadline: 'Your cup is ready.',
-  doneSub: 'Now claim your free coffee for opening week.',
+  doneSub: 'Claim it with your phone number.',
   claim: 'Claim my free coffee',
   backToStore: 'Back to the storefront',
 
@@ -44,18 +41,19 @@ export const COPY = {
   ],
 
   phoneTitle: 'Where should we text your free coffee?',
-  phoneSub: 'We’ll text it when we open. Show the text at the counter.',
+  phoneSub: 'Show the text at the counter, opening week.',
   phoneCta: 'Text it to me',
   phoneSending: 'Saving…',
-  phoneInvalid: 'That number doesn’t look right — 10 digits, US only.',
+  phoneInvalid: 'Enter a valid US mobile number.',
+  saveFailed: 'Couldn’t save. Try again.',
   phoneIncomplete: 'Enter all 10 digits.',
   // TCPA-style disclosure shown under the button. Have counsel review.
   smsDisclosure:
     'By tapping “Text it to me”, you agree to receive recurring automated marketing texts from Saintwood at this number. Consent isn’t a condition of purchase. Msg frequency varies. Msg & data rates may apply. Reply STOP to cancel, HELP for help.',
 
-  emailEyebrow: 'You’re on the list',
+  emailEyebrow: 'Saved',
   emailTitle: 'Want updates by email too?',
-  emailSub: 'Opening day and menu news. Optional.',
+  emailSub: 'Opening day and menu news.',
   emailCta: 'Add my email',
   emailSkip: 'No thanks',
   emailInvalid: 'Double-check that email.',
@@ -63,8 +61,8 @@ export const COPY = {
 
   // After signup: the storefront
   finalHeadline: 'You’re on the list.',
-  finalSub: 'We’ll text your free coffee when we open.',
-  finalReturning: 'We’ll text your free coffee when we open.',
+  finalSub: 'We’ll text your free coffee opening week.',
+  finalReturning: 'We’ll text your free coffee opening week.',
   igCta: 'Follow @saintwoodcafe',
-  peek: ['Not yet.', 'Coming soon.'],
+  peek: 'Opening soon.',
 };
