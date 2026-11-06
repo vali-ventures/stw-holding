@@ -130,6 +130,13 @@ async function boot() {
   const syncText = () => { scene.textBottom = intro.getBoundingClientRect().bottom; };
   syncText();
 
+  // The page itself never scrolls: block iOS rubber-banding (which also toggles Safari's
+  // toolbar and nudges the layout). Only the sheet's own content may scroll.
+  document.addEventListener('touchmove', (e) => {
+    const sc = e.target.closest && e.target.closest('.sheet-inner');
+    if (!sc || sc.scrollHeight <= sc.clientHeight) e.preventDefault();
+  }, { passive: false });
+
   let rt;
   window.addEventListener('resize', () => {
     clearTimeout(rt);

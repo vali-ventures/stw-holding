@@ -40,10 +40,18 @@ export class Scene {
   }
 
   // ── layout ────────────────────────────────────────────────
-  resize() {
-    const r = this.cv.getBoundingClientRect();
-    const W = Math.round(r.width), H = Math.round(r.height);
+  resize(force = false) {
+    const W = Math.round(document.documentElement.clientWidth || window.innerWidth);
+    const H = Math.round(window.innerHeight);
     if (!W || !H) return;
+    // Never re-lay out behind the open sheet (the keyboard changes the height there).
+    if (this.paused && !force) { this._pendingResize = true; return; }
+    // Safari's toolbar showing/hiding nudges the height by ~50–80px. That's not a real
+    // resize: keep the layout exactly where it is (the canvas has a fixed pixel size, so
+    // nothing stretches or jumps). Only width changes (rotation) or big height changes
+    // re-lay out the scene.
+    if (!force && this.W === W && this.H && Math.abs(H - this.H) < 160) return;
+    this.cv.style.width = W + 'px'; this.cv.style.height = H + 'px';
     const prev = this.W ? { W: this.W, gt: this.gt } : null;
     this.W = W; this.H = H;
     // ≤2x, and never more than ~4.5M canvas pixels (big desktop screens)
@@ -289,7 +297,11 @@ export class Scene {
   // ── simulation ───────────────────────────────────────────
   pause(on) {
     this.paused = on;
-    if (!on) { this.last = performance.now(); this._wake(); }
+    if (!on) {
+      this.last = performance.now();
+      if (this._pendingResize) { this._pendingResize = false; this.resize(); }
+      this._wake();
+    }
   }
   _wake() { if (!this._raf) this._raf = requestAnimationFrame(this._loop); }
 
