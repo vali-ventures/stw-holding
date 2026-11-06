@@ -200,7 +200,7 @@ export class Scene {
       this.ptr.mode = 'drag';
       this.ptr.offX = x - p.x; this.ptr.offY = y - p.y;
     }
-    p.held = true; p.vx = p.vy = 0; if (k === 'press') { p.intent = 0; p.retreat = false; }
+    p.held = true; p.vx = p.vy = 0; if (k === 'press') p.intent = 0;
     this.ptr.kind = k; this._grabbing = true;
     this.ptr.groundY = clamp(p.y, this.gt, this.gt + this.depth);
     if (k === 'cup') this.ptr.groundY = clamp(p.y, this.gt, this.gt + this.depth);
@@ -497,14 +497,14 @@ export class Scene {
     const prox = (1 - smooth(g.rx * 0.9, g.rx * 3.0, hx)) * smooth(-H * 0.05, H * 0.15, above) * (1 - smooth(H * 1.3, H * 2.2, above));
     // Pour intent: push the press toward its spout and it starts to pour, and keeps
     // pouring while you hold it there. Pull it back (or let go) and it rights itself.
-    // Hovering over the cup pours too. Either way it tips as far as it needs to for a
-    // steady stream, so it keeps flowing as it empties.
+    // It tips as far as it needs to for a steady stream, so it keeps flowing as it empties.
     const fwd = (p.vx || 0) * f;
-    if (this.auto) { p.intent = 0; p.retreat = false; }
-    else if (fwd > H * 0.45) { p.intent = Math.min(1, (p.intent || 0) + dt * 5); p.retreat = false; }
-    else if (fwd < -H * 0.6) { p.intent = Math.max(0, (p.intent || 0) - dt * 8); p.retreat = true; }
-    // pulling it back always wins over "hovering over the cup"
-    const want = Math.max(p.intent || 0, p.retreat ? 0 : prox);
+    if (this.auto) p.intent = 0;
+    else if (fwd > H * 0.45) p.intent = Math.min(1, (p.intent || 0) + dt * 5);
+    else if (fwd < -H * 0.6) p.intent = Math.max(0, (p.intent || 0) - dt * 8);
+    // One rule for people: push toward the spout to pour, pull back to stop.
+    // (Hovering over the cup only steers "Make it for me".)
+    const want = this.auto ? prox : (p.intent || 0);
     // nothing left? level it out instead of tipping it upside down
     const target = this._upright || p.vol < 0.03 ? 0 : f * want * this._pourAngle(p.vol);
     // tip in smoothly, right it a little quicker (that's what stops the dribble)
