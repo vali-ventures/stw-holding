@@ -201,6 +201,7 @@ export class Scene {
       this.ptr.offX = x - p.x; this.ptr.offY = y - p.y;
     }
     p.held = true; p.vx = p.vy = 0; if (k === 'press') p.intent = 0;
+    if (!this.auto) { A.pick(); A.haptic(6); }
     this.ptr.kind = k; this._grabbing = true;
     this.ptr.groundY = clamp(p.y, this.gt, this.gt + this.depth);
     if (k === 'cup') this.ptr.groundY = clamp(p.y, this.gt, this.gt + this.depth);
@@ -296,7 +297,7 @@ export class Scene {
   // the ambient bits (steam, the bobbing arrow), and not at all under the sheet.
   _busy() {
     if (this.ptr || this.auto || this.np || this.ripples.length) return true;
-    for (const p of Object.values(this.pieces)) if (p.held || Math.abs(p.vx) > 1 || Math.abs(p.vy) > 1 || Math.abs(p.va || 0) > 0.01 || p.sliding || p.brewing) return true;
+    for (const p of Object.values(this.pieces)) if (p.held || Math.abs(p.lift || 0) > 0.01 || Math.abs(p.vx) > 1 || Math.abs(p.vy) > 1 || Math.abs(p.va || 0) > 0.01 || p.sliding || p.brewing) return true;
     const c = this.pieces.cup;
     return Math.abs(c.sloshV) > 0.01 || Math.abs(c.squashV) > 0.01 || Math.abs(c.lidOffV) > 0.5 || (this._doneT > 0 && !this.done) || (this.peekT != null && this.t - this.peekT < 2.4);
   }
@@ -319,6 +320,12 @@ export class Scene {
 
   _step(dt) {
     const { cup, press, lid, sleeve } = this.pieces;
+    // "lift": a piece in your hand rises a touch (scale + softer shadow) so a touch
+    // pickup reads as clearly as a cursor changing to a closed hand
+    for (const k of ['cup', 'press', 'lid', 'sleeve']) {
+      const p = this.pieces[k], on = this.ptr && this.ptr.kind === k ? 1 : 0;
+      p.lift = (p.lift || 0) + (on - (p.lift || 0)) * Math.min(1, dt * (on ? 16 : 10));
+    }
     // however a drag ends (release, snap, resize), tell the UI once
     if (this._grabbing && !this.ptr) { this._grabbing = false; this.hooks.onRelease && this.hooks.onRelease(); }
     this.idle += dt;
@@ -713,18 +720,20 @@ export class Scene {
     if (this.mode === 'store') this._drawStoreFg(x);
   }
 
-  _ground(x, px, py, w, lift = 0) {
+  _ground(x, px, py, w, lift = 0, soft = 0) {
     x.save();
-    x.globalAlpha = 0.16 * (1 - Math.min(1, lift / (this.hc * 1.2)));
+    x.globalAlpha = 0.16 * (1 - Math.min(1, lift / (this.hc * 1.2))) * (1 - 0.4 * soft);
     x.fillStyle = P.ink;
-    x.beginPath(); x.ellipse(px, py + 2, w * (0.55 + 0.15 * Math.min(1, lift / this.hc)), w * 0.1, 0, 0, Math.PI * 2); x.fill();
+    x.beginPath(); x.ellipse(px, py + 2, w * (0.55 + 0.15 * Math.min(1, lift / this.hc)) * (1 + 0.14 * soft), w * 0.1 * (1 + 0.2 * soft), 0, 0, Math.PI * 2); x.fill();
     x.restore();
   }
 
   _drawCup(x) {
     const c = this.pieces.cup, g = this.g, H = this.hc, S = this.spr;
     const gy = c.held ? (this.ptr ? this.ptr.groundY : c.y) : (c.groundY ?? c.y);
-    this._ground(x, c.x, Math.max(gy, c.y), g.bw, Math.max(0, gy - c.y));
+    this._ground(x, c.x, Math.max(gy, c.y), g.bw, Math.max(0, gy - c.y), c.lift || 0);
+    const L = 1 + 0.05 * (c.lift || 0);
+    x.save(); x.translate(c.x, c.y); x.scale(L, L); x.translate(-c.x, -c.y);
     x.save();
     x.translate(c.x, c.y); x.rotate(c.a); x.scale(1 + c.squash * 0.6, 1 - c.squash);
     drawSprite(x, S.cup.body);
@@ -768,6 +777,7 @@ export class Scene {
       this._drawLid(x, lx, ly, c.a, true);
     }
     if (this.done || this.mode === 'store') this._steam(x);
+    x.restore();
   }
 
   _drawLid(x, px, py, a, attached) {
@@ -783,25 +793,28 @@ export class Scene {
         x.restore();
       }
       const gy = l.held ? (this.ptr ? this.ptr.groundY : l.y) : (l.groundY ?? l.y);
-      if (!mag) this._ground(x, l.x, Math.max(gy, l.y), this.g.lidW * 0.9, Math.max(0, gy - l.y));
+      if (!mag) this._ground(x, l.x, Math.max(gy, l.y), this.g.lidW * 0.9, Math.max(0, gy - l.y), l.lift || 0);
     }
-    x.save(); x.translate(px, py); x.rotate(a); drawSprite(x, this.spr.lid); x.restore();
+    const Ll = 1 + 0.05 * (l.lift || 0) * (attached && this.ptr && this.ptr.kind === 'cup' ? 0 : 1);
+    x.save(); x.translate(px, py); x.rotate(a); x.scale(Ll, Ll); drawSprite(x, this.spr.lid); x.restore();
   }
 
   _drawSleeveFree(x) {
     const s = this.pieces.sleeve, g = this.g;
     const gy = s.held ? (this.ptr ? this.ptr.groundY : s.y) : (s.groundY ?? s.y);
-    this._ground(x, s.x, Math.max(gy, s.y), g.tw * 0.8, Math.max(0, gy - s.y));
-    x.save(); x.translate(s.x, s.y - g.sleeveH / 2); x.rotate(s.a); drawSprite(x, this.spr.sleeveFree); x.restore();
+    this._ground(x, s.x, Math.max(gy, s.y), g.tw * 0.8, Math.max(0, gy - s.y), s.lift || 0);
+    const Ls = 1 + 0.05 * (s.lift || 0);
+    x.save(); x.translate(s.x, s.y - g.sleeveH / 2); x.rotate(s.a); x.scale(Ls, Ls); drawSprite(x, this.spr.sleeveFree); x.restore();
   }
 
   _drawPress(x) {
     const p = this.pieces.press, pg = this.pg, S = this.spr.press;
     const pivot = [0, -pg.base - pg.gh * 0.5];
     const gy = p.held ? (this.ptr ? this.ptr.groundY : p.y) : (p.groundY ?? p.y);
-    this._ground(x, p.x, Math.max(gy, p.y), pg.gw * 1.2, Math.max(0, gy - p.y));
+    this._ground(x, p.x, Math.max(gy, p.y), pg.gw * 1.2, Math.max(0, gy - p.y), p.lift || 0);
     x.save();
-    x.translate(p.x + pivot[0], p.y + pivot[1]); x.rotate(p.tilt); x.translate(-pivot[0], -pivot[1]);
+    const Lp = 1 + 0.04 * (p.lift || 0);
+    x.translate(p.x + pivot[0], p.y + pivot[1]); x.rotate(p.tilt); x.scale(Lp, Lp); x.translate(-pivot[0], -pivot[1]);
     x.scale(p.face, 1);
     drawSprite(x, S.back);
     // liquid stays level in world space

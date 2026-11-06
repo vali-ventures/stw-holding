@@ -101,6 +101,8 @@ export function splash() { burst({ freq: 1800, q: 0.8, dur: 0.09, gain: 0.12 });
 export function chime() {
   [523.25, 659.25, 783.99, 1046.5].forEach((f, i) => tone({ freq: f, dur: 0.9, gain: 0.07, type: 'sine', at: i * 0.07 }));
 }
+// Picking something up: a soft, low "tok" — felt more than heard.
+export function pick() { tone({ freq: 520, dur: 0.06, gain: 0.07, type: 'sine', slide: 1.35 }); burst({ freq: 1400, q: 2, dur: 0.018, gain: 0.08 }); }
 export function tick() { tone({ freq: 1800, dur: 0.025, gain: 0.04, type: 'square' }); }
 
 export function haptic(ms = 10) { try { navigator.vibrate && navigator.vibrate(ms); } catch {} }
