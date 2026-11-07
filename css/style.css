@@ -235,25 +235,29 @@ body.dragging, body.dragging #stage { cursor: grabbing !important; }
 }
 .scrim.show { opacity: 1; }
 .sheet {
-  position: fixed; z-index: 10; left: 0; right: 0;
-  bottom: var(--kb);
-  max-height: calc(var(--vvh) - var(--safe-t) - 10px);
+  /* Phones: a bottom sheet. Half height for the question; it grows to full height for
+     typing, with everything pinned to the top, so the keyboard rises into empty space
+     and nothing on screen moves. (The page behind never scrolls.) */
+  position: fixed; z-index: 10; left: 0; right: 0; bottom: 0;
+  height: auto; max-height: calc(100% - var(--safe-t) - 12px);
   display: flex; flex-direction: column;
   background: var(--cream) var(--paper-tex, none) repeat; background-size: 220px;
   border-radius: 26px 26px 0 0;
   box-shadow: 0 -1px 0 rgba(40,52,39,.12), 0 -24px 60px -20px rgba(20, 16, 8, .35);
   transform: translateY(105%);
-  transition: transform .55s var(--ease), bottom .25s var(--ease);
+  transition: transform .55s var(--ease), height .45s var(--ease);
   color: var(--brown);
   overscroll-behavior: contain;
 }
 .sheet.show { transform: none; }
+.sheet.tall { height: calc(100% - var(--safe-t) - 12px); }
+/* holds the keyboard open between a tap and the field that appears a moment later */
+.kb-proxy { position: fixed; top: 0; left: 0; width: 1px; height: 1px; padding: 0; border: 0; opacity: 0; font-size: 16px; pointer-events: none; }
 .sheet-inner {
-  overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch;
+  flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch;
   padding: 18px var(--gutter) calc(var(--safe-b) + 22px);
   width: 100%; max-width: 480px; margin: 0 auto;
 }
-.sheet.kb .sheet-inner { padding-bottom: 16px; }
 .sheet-head { display: grid; grid-template-columns: 44px 1fr 44px; align-items: center; height: 44px; margin: 0 -10px 10px; }
 .sheet-head .close { grid-column: 3; }
 .close { width: 44px; height: 44px; display: grid; place-items: center; border-radius: 50%; color: var(--forest); }
@@ -276,7 +280,6 @@ body.dragging, body.dragging #stage { cursor: grabbing !important; }
   letter-spacing: -0.01em; text-wrap: balance;
 }
 .lede { margin: 10px auto 0; max-width: 32ch; color: var(--muted); font-size: 15.5px; line-height: 1.45; text-wrap: balance; }
-.sheet.kb .lede { display: none; }
 
 .choices { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 22px 0 6px; }
 .choice {
@@ -345,6 +348,7 @@ body.dragging, body.dragging #stage { cursor: grabbing !important; }
 .field input:focus { outline: none; border-color: var(--forest); box-shadow: 0 0 0 4px rgba(7, 34, 15, .08); background: #fff; }
 .field input.bad { border-color: #8a2a1a; animation: shake .38s; }
 
+.legal + .send { margin-top: 14px; }
 .err { min-height: 0; margin: 8px 2px 0; font-size: 13.5px; color: #8a2a1a; text-align: left; }
 .err:empty { margin: 0; }
 .send { margin-top: 16px; }
@@ -381,6 +385,31 @@ body.is-loading .view, body.is-loading .top { opacity: 0; }
   .link { font-size: 16px; }
   .addr { font-size: 12px; }
 }
+/* Phones: typing steps are laid out so the field, the disclosure and the button all sit
+   above the keyboard (≈ the top half of the screen) — nothing has to move when it opens. */
+@media (max-width: 719px), (max-height: 559px) {
+  .sheet-head { position: absolute; top: 4px; right: max(4px, var(--safe-r)); height: auto; margin: 0; z-index: 1; display: block; }
+  .sheet-inner { padding-top: 22px; }
+  .title { padding: 0 34px; }
+  .sheet.tall .title { font-size: 25px; }
+  .sheet.tall .step[data-step="phone"] .lede { display: none; }
+  .sheet.tall .phone { margin-top: 16px; height: 58px; }
+  .sheet.tall .legal { margin-top: 10px; font-size: 11px; line-height: 1.42; }
+  .sheet.tall .legal + .send { margin-top: 12px; height: 50px; }
+  .sheet.tall .field input { margin-top: 14px; height: 52px; }
+  .sheet.tall .add { margin-top: 12px; height: 50px; }
+  .sheet.tall .lede { margin-top: 6px; font-size: 14.5px; }
+}
+/* the smallest phones (iPhone SE): a touch tighter still */
+@media (max-width: 340px), (max-height: 600px) {
+  .sheet.tall .title { font-size: 22px; padding: 0 28px; }
+  .sheet.tall .lede { display: none; }
+  .sheet.tall .legal { font-size: 10.5px; line-height: 1.38; }
+  .sheet.tall .phone { margin-top: 12px; height: 54px; }
+  .sheet.tall { height: calc(100% - var(--safe-t) - 6px); }
+  .sheet.tall .sheet-inner { padding-top: 16px; }
+}
+.sheet:focus { outline: none; }
 @media (min-width: 720px) and (min-height: 560px) {
   .sheet {
     left: 50%; right: auto; bottom: auto; top: 50%; width: 460px;
@@ -390,7 +419,7 @@ body.is-loading .view, body.is-loading .top { opacity: 0; }
     box-shadow: 0 30px 80px -30px rgba(20, 16, 8, .45), 0 0 0 1px rgba(40,52,39,.08);
   }
   .sheet.show { transform: translate(-50%, -50%); opacity: 1; }
-  .sheet.kb { top: calc(var(--vvh) / 2); }
+  .sheet.tall { height: auto; }
   .sheet::before { display: none; }
   .sheet-inner { padding: 22px 34px 32px; }
   .headline { max-width: 18ch; }

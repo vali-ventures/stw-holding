@@ -88,15 +88,16 @@ async function boot() {
     onClose(didSave) { scene.pause(false); if (didSave) toStore(false); },
   });
 
-  const openFlow = () => { A.unlock(); storeImg(); scene.pause(true); flow.open('q'); };
+  // e.detail is 0 when a button is "clicked" with the keyboard (Enter/Space)
+  const openFlow = (e) => { A.unlock(); storeImg(); scene.pause(true); flow.open('q', !!e && e.detail === 0); };
   // Inactive until the cup is made: a tap just points at what's left to do.
-  claim.addEventListener('click', () => {
+  claim.addEventListener('click', (e) => {
     if (claim.classList.contains('off')) {
       const st = $('.steps', intro); st.classList.remove('flash'); void st.offsetWidth; st.classList.add('flash');
       A.unlock(); A.haptic(12);
       return;
     }
-    saved() ? toStore(false) : openFlow();
+    saved() ? toStore(false) : openFlow(e);
   });
   if (saved()) claim.textContent = COPY.backToStore;
   auto.addEventListener('click', async () => { A.unlock(); auto.disabled = true; try { await scene.autoplay(); } finally { auto.disabled = false; } });

@@ -45,7 +45,6 @@ export const COPY = {
   phoneSending: 'Saving…',
   phoneInvalid: 'Enter a valid US mobile number.',
   saveFailed: 'Couldn’t save. Try again.',
-  phoneIncomplete: 'Enter all 10 digits.',
   // TCPA-style disclosure shown under the button. Have counsel review.
   smsDisclosure:
     'By tapping “Text it to me”, you agree to receive recurring automated marketing texts from Saintwood at this number. Consent isn’t a condition of purchase. Msg frequency varies. Msg & data rates may apply. Reply STOP to cancel, HELP for help.',
@@ -55,7 +54,6 @@ export const COPY = {
   emailSub: 'Opening day and menu news.',
   emailCta: 'Add my email',
   emailSkip: 'No thanks',
-  emailInvalid: 'Double-check that email.',
   emailDisclosure: 'Saintwood emails only. Unsubscribe any time.',
 
   // After signup: the storefront

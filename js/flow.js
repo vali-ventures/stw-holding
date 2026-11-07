@@ -17,6 +17,12 @@ export class Flow {
     this.state = { id: null, interest: null, phone: '', email: '' };
     this.steps = ['q', 'phone', 'email'];
     this.cur = 'q';
+    // Phones only open the keyboard if a field is focused during the tap itself. These
+    // invisible fields catch focus inside the tap; the real field takes it a moment later.
+    this.coarse = matchMedia('(pointer: coarse)').matches;
+    const proxy = (type, mode) => { const i = document.createElement('input'); i.type = type; i.inputMode = mode; i.className = 'kb-proxy'; i.tabIndex = -1; i.autocomplete = 'off'; i.setAttribute('aria-hidden', 'true'); document.body.appendChild(i); return i; };
+    this.proxyTel = proxy('tel', 'numeric');
+    this.proxyEmail = proxy('email', 'email');
     this._buildChoices();
     this._buildDigits();
     this._wire();
@@ -24,20 +30,23 @@ export class Flow {
   }
 
   // ── open / close ─────────────────────────────────────────
-  open(step = 'q') {
+  open(step = 'q', viaKeyboard = false) {
     this.prevFocus = document.activeElement;
     this.root.hidden = false; this.scrim.hidden = false;
+    this.root.classList.toggle('tall', step !== 'q'); this.root.style.height = '';
     document.querySelectorAll('.top, .intro, .dock, .final, #stage').forEach((el) => el.setAttribute('inert', ''));
     this.openedAt = performance.now();
     this._show(step, true);
     requestAnimationFrame(() => requestAnimationFrame(() => { this.root.classList.add('show'); this.scrim.classList.add('show'); }));
-    setTimeout(() => (this.root.querySelector('.choice') || this.root.querySelector('.close')).focus({ preventScroll: true }), 60);
+    // Keyboard users land on the first answer; touch users get no focus ring on an answer
+    // they haven't picked (focus just moves into the sheet itself).
+    setTimeout(() => (viaKeyboard ? this.root.querySelector('.choice') : this.root).focus({ preventScroll: true }), 60);
   }
   close(done = false) {
     this.root.classList.remove('show'); this.scrim.classList.remove('show');
     document.activeElement && document.activeElement.blur();
     document.querySelectorAll('[inert]').forEach((el) => el.removeAttribute('inert'));
-    setTimeout(() => { this.root.hidden = true; this.scrim.hidden = true; }, 520);
+    setTimeout(() => { this.root.hidden = true; this.scrim.hidden = true; this.root.classList.remove('tall'); this.root.style.height = ''; }, 520);
     if (!done && this.prevFocus && this.prevFocus.focus) this.prevFocus.focus({ preventScroll: true });
     this.hooks.onClose && this.hooks.onClose(done || !!this.state.saved);
   }
@@ -46,13 +55,15 @@ export class Flow {
     const prev = this.root.querySelector(`.step[data-step="${this.cur}"]`);
     const next = this.root.querySelector(`.step[data-step="${name}"]`);
     const go = () => {
+      if (name !== 'q' && !this.root.classList.contains('tall')) this._grow();
       this.root.querySelectorAll('.step').forEach((s) => (s.hidden = s !== next));
       next.classList.remove('leaving');
       this.cur = name;
       const i = this.steps.indexOf(name);
       this.root.querySelector('.sheet-inner').scrollTop = 0;
-      if (name === 'phone') setTimeout(() => this.phoneInput.focus({ preventScroll: true }), instant ? 380 : 60);
-      // don't pop the keyboard for an optional field — let them choose
+      // typing steps open with the keyboard already up
+      const field = name === 'phone' ? this.phoneInput : name === 'email' ? this.root.querySelector('#email') : null;
+      if (field) field.focus({ preventScroll: true });
     };
     if (prev && prev !== next && !instant && !prev.hidden) {
       prev.classList.add('leaving');
@@ -70,6 +81,7 @@ export class Flow {
       b.innerHTML = (ICONS[o.value] || '') + `<span>${o.label}</span>`;
       b.addEventListener('click', () => {
         A.unlock(); A.haptic(6);
+        if (this.coarse) this.proxyTel.focus({ preventScroll: true });
         box.querySelectorAll('.choice').forEach((c) => c.setAttribute('aria-checked', String(c === b)));
         this.state.interest = o.value;
         clearTimeout(this._adv);
@@ -156,16 +168,15 @@ export class Flow {
       this._renderPhone();
       if (d.length === 10 && before.length < 10) {
         if (!this._validPhone(d)) return this._phoneErr();
-        // done typing: drop the keyboard, give it a little wave
+        // complete: a little wave; the keyboard stays and the button is right below
         lab.classList.remove('done'); void lab.offsetWidth; lab.classList.add('done');
         A.haptic(10);
-        setTimeout(() => inp.blur(), 120);
       }
     });
     // keep caret at the end; no mid-string editing weirdness
     inp.addEventListener('keydown', (e) => {
       if (['ArrowLeft', 'ArrowRight', 'Home', 'End', 'ArrowUp', 'ArrowDown'].includes(e.key)) e.preventDefault();
-      if (e.key === 'Enter' && this.state.phone.length < 10) { e.preventDefault(); this._phoneErr(COPY.phoneIncomplete); }
+      if (e.key === 'Enter' && !(this.state.phone.length === 10 && this._validPhone(this.state.phone))) e.preventDefault(); // nothing until it's a real number
       requestAnimationFrame(() => { try { inp.setSelectionRange(inp.value.length, inp.value.length); } catch {} });
     });
 
@@ -174,6 +185,7 @@ export class Flow {
       const d = this.state.phone;
       if (d.length !== 10 || !this._validPhone(d)) return this._phoneErr();
       const btn = R.querySelector('.send');
+      if (this.coarse) this.proxyEmail.focus({ preventScroll: true });
       btn.disabled = true; btn.textContent = COPY.phoneSending;
       this.state.id = this.state.id || newId();
       try {
@@ -194,22 +206,27 @@ export class Flow {
     });
 
     // step 3: email
-    const em = R.querySelector('#email'), emErr = R.querySelector('#email-err');
-    em.addEventListener('input', () => { emErr.textContent = ''; em.classList.remove('bad'); });
+    const em = R.querySelector('#email'), addBtn = R.querySelector('.add');
+    const looksReal = (v) => /^[^\s@]+@[^\s@.]+(\.[^\s@.]+)*\.[a-z]{2,}$/i.test(v);
+    em.addEventListener('input', () => { addBtn.disabled = !looksReal(em.value.trim()); });
     R.querySelector('form[data-step="email"]').addEventListener('submit', (e) => {
       e.preventDefault();
       const v = em.value.trim();
-      if (!v) return this.close(true);
-      if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(v)) {
-        emErr.textContent = COPY.emailInvalid; em.classList.remove('bad'); void em.offsetWidth; em.classList.add('bad'); A.haptic(30);
-        return;
-      }
+      if (!looksReal(v)) return; // the button is greyed out until it is
       this.state.email = v;
       em.blur();
       send({ type: 'update', id: this.state.id, email: v }).catch(() => {});
       this.close(true);
     });
     R.querySelector('.skip-email').addEventListener('click', () => { em.blur(); this.close(true); });
+  }
+
+  // half → full height, animated from the sheet's current size
+  _grow() {
+    const r = this.root;
+    r.style.height = r.getBoundingClientRect().height + 'px';
+    void r.offsetHeight;
+    r.classList.add('tall'); r.style.height = '';
   }
 
   _phoneErr(msg) {
@@ -229,7 +246,6 @@ export class Flow {
       const kb = vv ? Math.max(0, window.innerHeight - vv.height - vv.offsetTop) : 0;
       root.style.setProperty('--vvh', h + 'px');
       root.style.setProperty('--kb', kb + 'px');
-      this.root.classList.toggle('kb', kb > 80);
       if (window.scrollY || document.scrollingElement.scrollTop) window.scrollTo(0, 0);
     };
     if (vv) { vv.addEventListener('resize', update); vv.addEventListener('scroll', update); }
