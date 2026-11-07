@@ -63,11 +63,12 @@ const check = (dev, name, ok, detail = '') => { results.push({ dev, name, ok, de
     g = await G(); await drag([g.lid, [g.cup[0] + 6, g.cup[1] - g.H * 2.1]]);
     let s = await S(); check(dev, 'lid dropped from above clicks on', s.lid && s.ticks.includes('lid'));
     await pour(1500); s = await S(); check(dev, 'pour with lid on: cup stays empty', s.fill < 0.02, `fill=${s.fill.toFixed(2)} spilled=${s.spilled.toFixed(2)}`);
-    g = await G(); await drag([g.lid, [g.lid[0], g.lid[1] - g.H * 0.6], [g.lid[0] + g.H * 1.1, g.lid[1] - g.H * 0.3]]);
+    g = await G(); const away = g.pr[0] > g.cup[0] ? -1 : 1; // put things down on the side away from the press
+    await drag([g.lid, [g.lid[0], g.lid[1] - g.H * 0.6], [g.lid[0] + away * g.H * 1.1, g.lid[1] - g.H * 0.3]]);
     s = await S(); check(dev, 'lid tugged off → unticks', !s.lid && !s.ticks.includes('lid'));
     g = await G(); await drag([g.sl, [g.cup[0] - 4, g.cup[1] - g.H * 0.2]]);
     s = await S(); check(dev, 'sleeve dropped low goes on', s.sleeve && s.ticks.includes('sleeve'));
-    g = await G(); await drag([g.sl, [g.sl[0], g.sl[1] - g.H * 0.9], [g.sl[0] + g.H * 1.4, g.cup[1] - g.H * 1.6]]);
+    g = await G(); await drag([g.sl, [g.sl[0], g.sl[1] - g.H * 0.9], [g.sl[0] + (g.pr[0] > g.cup[0] ? -1 : 1) * g.H * 1.4, g.cup[1] - g.H * 1.6]]);
     s = await S(); check(dev, 'sleeve slid off → unticks', !s.sleeve && !s.ticks.includes('sleeve'));
     g = await G(); await drag([g.sl, [g.cup[0] + 5, g.cup[1] - g.H * 1.35]]);
     s = await S(); check(dev, 'sleeve dropped high goes on', s.sleeve);

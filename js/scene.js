@@ -71,9 +71,11 @@ export class Scene {
     const cx = W / 2;
     this.home = {
       cup: [cx, this.gt + this.depth * 0.55],
-      press: [cx - spread, this.gt + this.depth * 0.3],
-      lid: [cx + spread * 1.04, this.gt + this.depth * 0.02],
-      sleeve: [cx + spread * 0.8, this.gt + this.depth * 1.0],
+      // most people are right-handed: the press sits right of the cup with its handle on
+      // the right and pours leftward (and the hand dragging it never hides the cup)
+      press: [cx + spread, this.gt + this.depth * 0.3],
+      lid: [cx - spread * 1.04, this.gt + this.depth * 0.02],
+      sleeve: [cx - spread * 0.8, this.gt + this.depth * 1.0],
     };
     if (!this.pieces) this._spawn();
     else {
@@ -88,7 +90,8 @@ export class Scene {
         if (p.attached) continue;
         p.x = this.home[k][0]; p.y = this.home[k][1];
       }
-      this.pieces.press.tilt = 0; this.np = 0; this.pieces.cup.lidOff = 0; this.pieces.cup.lidOffV = 0;
+      this.pieces.press.tilt = 0; this.np = 0;
+      this.pieces.press.face = this.pieces.cup.x >= this.pieces.press.x ? 1 : -1; this.pieces.cup.lidOff = 0; this.pieces.cup.lidOffV = 0;
       this.stains.getContext('2d').clearRect(0, 0, this.stains.width, this.stains.height);
     }
   }
@@ -106,7 +109,7 @@ export class Scene {
     const mkp = (kind, extra = {}) => ({ kind, x: this.home[kind][0], y: this.home[kind][1], vx: 0, vy: 0, a: 0, va: 0, held: false, attached: false, ...extra });
     this.pieces = {
       cup: mkp('cup', { fill: 0, slosh: 0, sloshV: 0, squash: 0, squashV: 0, lidOff: 0, lidOffV: 0 }),
-      press: mkp('press', { vol: this.pg.capacity, tilt: 0, face: 1, rate: 0 }),
+      press: mkp('press', { vol: this.pg.capacity, tilt: 0, face: -1, rate: 0 }),
       lid: mkp('lid'),
       sleeve: mkp('sleeve', { s: 0, threaded: false, sliding: false, sv: 0, squeeze: 0 }),
     };
@@ -588,7 +591,7 @@ export class Scene {
     p.restT = 0; p.brewing = false;
     const fwd = (p.vx || 0) * f;
     if (this.auto) p.intent = 0;
-    else if (fwd > H * 0.45) p.intent = Math.min(1, (p.intent || 0) + dt * 5);
+    else if (fwd > H * 0.45) p.intent = 1; // any clear push toward the spout commits to pouring (the tilt still eases in)
     else if (fwd < -H * 0.6) p.intent = Math.max(0, (p.intent || 0) - dt * 8);
     // One rule for people: push toward the spout to pour, pull back to stop.
     // (Hovering over the cup only steers "Make it for me".)
