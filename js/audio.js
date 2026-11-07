@@ -12,9 +12,13 @@ export function setMuted(m) {
   if (master) master.gain.setTargetAtTime(m ? 0 : 0.9, ac.currentTime, 0.05);
 }
 
-// Must be called from a user gesture (iOS).
+// Must be called from a user gesture. iOS only counts the END of a tap (touchend/click)
+// as permission, so main.js calls this on every first-interaction event until it runs.
 export function unlock() {
-  if (ac) { if (ac.state === 'suspended') ac.resume(); return; }
+  if (ac) {
+    if (ac.state !== 'running') { ac.resume(); blip(); }
+    return;
+  }
   const AC = window.AudioContext || window.webkitAudioContext;
   if (!AC) return;
   ac = new AC();
@@ -26,7 +30,13 @@ export function unlock() {
   const d = noiseBuf.getChannelData(0);
   let b = 0;
   for (let i = 0; i < len; i++) { const w = Math.random() * 2 - 1; b = 0.97 * b + 0.03 * w; d[i] = w * 0.5 + b * 2.5; }
+  blip();
 }
+// a silent one-sample sound played inside the gesture: what finally wakes audio on iOS
+function blip() {
+  try { const s = ac.createBufferSource(); s.buffer = ac.createBuffer(1, 1, ac.sampleRate); s.connect(ac.destination); s.start(0); } catch {}
+}
+export function isRunning() { return !!ac && ac.state === 'running'; }
 
 function noise(loop = true) {
   const s = ac.createBufferSource(); s.buffer = noiseBuf; s.loop = loop; return s;
@@ -80,13 +90,13 @@ export function slide(speed) {
   if (!ac) return;
   if (!slideNode) {
     const n = noise(), f = ac.createBiquadFilter(), g = ac.createGain();
-    f.type = 'bandpass'; f.frequency.value = 2600; f.Q.value = 0.7; g.gain.value = 0;
+    f.type = 'bandpass'; f.frequency.value = 1500; f.Q.value = 0.8; g.gain.value = 0;
     n.connect(f).connect(g).connect(master); n.start();
     slideNode = { f, g };
   }
   const s = Math.min(1, speed);
-  slideNode.g.gain.setTargetAtTime(s * 0.22, ac.currentTime, 0.03);
-  slideNode.f.frequency.setTargetAtTime(1800 + s * 1800, ac.currentTime, 0.05);
+  slideNode.g.gain.setTargetAtTime(s * 0.1, ac.currentTime, 0.04);
+  slideNode.f.frequency.setTargetAtTime(1100 + s * 900, ac.currentTime, 0.06);
 }
 
 export function lidClick() {
@@ -97,12 +107,7 @@ export function lidClick() {
 export function pop() { burst({ freq: 900, q: 2, dur: 0.06, gain: 0.35 }); tone({ freq: 520, dur: 0.07, gain: 0.08, slide: 1.6 }); }
 export function sleeveSeat() { burst({ freq: 700, q: 1, dur: 0.12, gain: 0.25, type: 'lowpass' }); }
 export function thud(v = 1) { tone({ freq: 110, dur: 0.12, gain: 0.18 * v, type: 'sine', slide: 0.5 }); burst({ freq: 400, q: 1, dur: 0.05, gain: 0.15 * v, type: 'lowpass' }); }
-export function splash() { burst({ freq: 1800, q: 0.8, dur: 0.09, gain: 0.12 }); }
-export function chime() {
-  [523.25, 659.25, 783.99, 1046.5].forEach((f, i) => tone({ freq: f, dur: 0.9, gain: 0.07, type: 'sine', at: i * 0.07 }));
-}
 // Picking something up: a soft, low "tok" — felt more than heard.
 export function pick() { tone({ freq: 520, dur: 0.06, gain: 0.07, type: 'sine', slide: 1.35 }); burst({ freq: 1400, q: 2, dur: 0.018, gain: 0.08 }); }
-export function tick() { tone({ freq: 1800, dur: 0.025, gain: 0.04, type: 'square' }); }
 
 export function haptic(ms = 10) { try { navigator.vibrate && navigator.vibrate(ms); } catch {} }

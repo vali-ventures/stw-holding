@@ -101,6 +101,11 @@ async function boot() {
   if (saved()) claim.textContent = COPY.backToStore;
   auto.addEventListener('click', async () => { A.unlock(); auto.disabled = true; try { await scene.autoplay(); } finally { auto.disabled = false; } });
 
+  // Wake audio on the first real tap/click anywhere (iOS ignores touch-start), and keep
+  // trying on later taps until the browser lets it run.
+  const wake = () => { A.unlock(); if (A.isRunning()) ['touchend', 'pointerup', 'click', 'keydown'].forEach((ev) => removeEventListener(ev, wake, true)); };
+  ['touchend', 'pointerup', 'click', 'keydown'].forEach((ev) => addEventListener(ev, wake, true));
+
   // sound toggle
   const snd = $('.sound');
   const syncSnd = () => { const on = !A.isMuted(); snd.setAttribute('aria-pressed', String(on)); snd.setAttribute('aria-label', on ? 'Sound on' : 'Sound off'); };

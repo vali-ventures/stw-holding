@@ -69,7 +69,7 @@ export class Flow {
       b.dataset.value = o.value;
       b.innerHTML = (ICONS[o.value] || '') + `<span>${o.label}</span>`;
       b.addEventListener('click', () => {
-        A.unlock(); A.tick(); A.haptic(6);
+        A.unlock(); A.haptic(6);
         box.querySelectorAll('.choice').forEach((c) => c.setAttribute('aria-checked', String(c === b)));
         this.state.interest = o.value;
         clearTimeout(this._adv);
@@ -153,7 +153,6 @@ export class Flow {
       this.state.phone = d;
       if (inp.value !== d) inp.value = d;
       err.textContent = ''; lab.classList.remove('bad');
-      if (d.length > before.length) { A.tick(); }
       this._renderPhone();
       if (d.length === 10 && before.length < 10) {
         if (!this._validPhone(d)) return this._phoneErr();
@@ -185,7 +184,7 @@ export class Flow {
         });
         this.state.saved = true;
         this.hooks.onSaved && this.hooks.onSaved({ id: this.state.id, last4: d.slice(-4) });
-        A.chime(); A.haptic(16);
+        A.haptic(16);
         this._show('email');
       } catch (ex) {
         this._phoneErr(ex.message === 'invalid' || ex.field === 'phone' ? null : COPY.saveFailed);
@@ -208,7 +207,6 @@ export class Flow {
       this.state.email = v;
       em.blur();
       send({ type: 'update', id: this.state.id, email: v }).catch(() => {});
-      A.tick();
       this.close(true);
     });
     R.querySelector('.skip-email').addEventListener('click', () => { em.blur(); this.close(true); });

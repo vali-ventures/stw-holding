@@ -468,7 +468,7 @@ export class Scene {
     // it isn't ready any more. (A small buffer below the line stops it flickering.)
     if (!this.done && this._complete()) {
       this._doneT = (this._doneT || 0) + dt;
-      if (this._doneT > 0.45) { this.done = true; A.chime(); A.haptic(20); this.hooks.onComplete && this.hooks.onComplete(); }
+      if (this._doneT > 0.45) { this.done = true; A.haptic(20); this.hooks.onComplete && this.hooks.onComplete(); }
     } else this._doneT = 0;
     // Once all three are done, it stays done: playing with the pieces afterwards
     // never takes the claim away. (Before that, the boxes tick and untick live.)
@@ -497,7 +497,7 @@ export class Scene {
     if (!p.threaded && over && p._wasAbove && s <= this.hc + g.sleeveH * 0.35 && s > g.sleeveY - 4 && !c.held) {
       p.threaded = true; p.s = Math.max(s, g.sleeveY);
       this.ptr.mode = 'thread'; this.ptr.offS = p.s - (c.y - this.ptr.y);
-      A.tick(); A.haptic(5);
+      A.haptic(5);
     }
     p._wasAbove = over ? (p._wasAbove || s > this.hc + g.sleeveH * 0.2) : s > this.hc + g.sleeveH * 0.2;
   }
@@ -509,7 +509,6 @@ export class Scene {
     if (Math.abs(p.x - c.x) < g.rx * 0.9 && s > -g.sleeveH * 0.3 && s < this.hc + g.sleeveH * 1.4 && !c.held) {
       p.threaded = true; p.sliding = true; p.s = clamp(s, 0, this.hc + g.sleeveH * 0.3);
       p.sv = p.s > g.sleeveY ? Math.min(0, -p.vy * 0.3) : 0;
-      A.tick();
       return true;
     }
     return false;
@@ -737,7 +736,6 @@ export class Scene {
           // bounces off the lid
           vy = -Math.abs(vy) * 0.25; vx = (x > c.x ? 1 : -1) * (80 + Math.random() * 160); y = mouthY - 2;
           Q.f[i] = 3;
-          this._splashSound();
         } else if (Q.f[i] !== 3) {
           c.fill += Q.v[i];
           if (Math.random() < 0.25) this.ripples.push({ x: (x - c.x) / g.rx, t: 0 });
@@ -757,7 +755,6 @@ export class Scene {
         if (Math.random() < 0.3) { sctx.globalAlpha = 0.12; sctx.lineWidth = 0.6; sctx.strokeStyle = P.coffee; sctx.stroke(); }
         sctx.restore();
         if (Math.random() < 0.08 && Q.f[i] !== 4) { this._emit(x, Q.g[i] - 1, (Math.random() - 0.5) * 160, -120 - Math.random() * 120, 0, 4); }
-        this._splashSound();
         dead = true;
       }
       if (!dead && (x < -50 || x > this.W + 50 || y > this.H + 50)) dead = true;
@@ -767,7 +764,6 @@ export class Scene {
     if (c.fill > 0.02 && this._lastFillReport !== Math.round(c.fill * 20)) { this._lastFillReport = Math.round(c.fill * 20); this._progress(); }
   }
 
-  _splashSound() { if (this.t - this.lastSplash > 0.09) { this.lastSplash = this.t; A.splash(); } }
 
   _nudge(key, copyKey) {
     if (this.nudged[key] || this.auto || this.done || this._doneT > 0 || this.mode !== 'bench') return;
