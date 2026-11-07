@@ -64,7 +64,8 @@ export class Scene {
     const hc = clamp(Math.min(W * (portrait ? 0.315 : 0.22), H * (portrait ? 0.21 : 0.27)), 70, 380);
     this._build(hc);
     this.depth = hc * 0.62;
-    this.gt = Math.round(Math.min(H * (portrait ? 0.68 : 0.65), H - this.depth - (portrait ? 128 : 104))); // ground top
+    // leave room below the counter for the controls ("Make it for me" + the claim button)
+    this.gt = Math.round(Math.min(H * (portrait ? 0.66 : 0.64), H - this.depth - (portrait ? 168 : 150))); // ground top
     this.counter = counterSprite(W + 20, this.depth * 1.3, this.dpr, Math.max(40, H - this.gt));
     const spread = Math.min(W * (portrait ? 0.33 : 0.28), hc * 1.75);
     const cx = W / 2;
@@ -465,13 +466,9 @@ export class Scene {
     if (!this.done && this._complete()) {
       this._doneT = (this._doneT || 0) + dt;
       if (this._doneT > 0.45) { this.done = true; A.chime(); A.haptic(20); this.hooks.onComplete && this.hooks.onComplete(); }
-    } else {
-      this._doneT = 0;
-      const { cup, lid, sleeve } = this.pieces;
-      if (this.done && this.mode === 'bench' && (cup.fill < FULL - 0.04 || !lid.attached || !sleeve.attached)) {
-        this.done = false; this.hooks.onIncomplete && this.hooks.onIncomplete();
-      }
-    }
+    } else this._doneT = 0;
+    // Once all three are done, it stays done: playing with the pieces afterwards
+    // never takes the claim away. (Before that, the boxes tick and untick live.)
     // puddles soak into the counter and fade away (on wall-clock time)
     const now = performance.now();
     if (now - (this._fadeAt || 0) > 1000) {

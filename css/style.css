@@ -118,6 +118,7 @@ body.dragging, body.dragging #stage { cursor: grabbing !important; }
   letter-spacing: -0.012em; color: var(--forest);
   max-width: 14ch; text-wrap: balance;
 }
+.sub:empty { display: none; }
 .sub {
   margin: clamp(8px, 1.4vh, 14px) auto 0; max-width: 36ch;
   font-size: clamp(15px, 4vw, 19px); line-height: 1.42; color: var(--muted);
@@ -184,7 +185,27 @@ body.dragging, body.dragging #stage { cursor: grabbing !important; }
 .btn svg .fill { fill: currentColor; stroke: none; }
 .wide { width: 100%; }
 
-.claim { min-width: min(100%, 300px); height: 58px; font-size: 17px; animation: rise .7s var(--spring) both; }
+.claim {
+  /* a slim pill sized to its text (not a full-width slab), still an easy thumb target */
+  min-width: 232px; height: 50px; padding: 0 30px; font-size: 16px;
+  /* the ring is part of the button, always (not a focus side-effect) */
+  box-shadow: 0 0 0 3px var(--cream), 0 0 0 4.5px var(--forest), 0 10px 26px -12px rgba(7, 34, 15, .7);
+  transition: opacity .45s var(--ease), transform .45s var(--spring), box-shadow .3s;
+}
+.claim.off {
+  /* inactive: a pale "ghost" of the button, same shape and ring */
+  background: var(--cream); color: rgba(7, 34, 15, .42);
+  box-shadow: 0 0 0 3px var(--cream), 0 0 0 4.5px rgba(7, 34, 15, .28);
+  cursor: default;
+}
+.claim.off:hover { background: var(--cream) !important; }
+.claim.off:active { transform: none; }
+.claim:focus-visible { outline: 2px solid var(--forest); outline-offset: 7px; }
+/* tapping the inactive button points at what's left */
+.steps.flash li:not(.on) { animation: nudgeStep .6s var(--ease); }
+.steps.flash li:not(.on) .box { animation: nudgeBox .6s var(--ease); }
+@keyframes nudgeStep { 30% { transform: translateY(-3px); } }
+@keyframes nudgeBox { 30% { background: rgba(7, 34, 15, .25); transform: scale(1.25); } }
 @keyframes rise { from { opacity: 0; transform: translateY(18px) scale(.96); } }
 
 /* ── Final (storefront) ─────────────────────────────── */
@@ -356,7 +377,7 @@ body.is-loading .view, body.is-loading .top { opacity: 0; }
   .steps { font-size: 13.5px; }
   .steps .box { width: 15px; height: 15px; }
   .btn { height: 62px; font-size: 18px; padding: 0 34px; }
-  .claim { height: 66px; font-size: 19px; }
+  .claim { height: 58px; font-size: 18px; min-width: 280px; }
   .link { font-size: 16px; }
   .addr { font-size: 12px; }
 }
@@ -392,7 +413,7 @@ body.is-loading .view, body.is-loading .top { opacity: 0; }
   .sub { font-size: 13.5px; margin-top: 4px; max-width: 52ch; }
   .steps { margin-top: 8px; }
   .dock { padding-bottom: calc(var(--safe-b) + 8px); gap: 4px; }
-  .claim { height: 48px; }
+  .claim { height: 46px; }
   .final-actions { flex-direction: row; justify-content: center; gap: 12px; }
   .final-actions .btn { height: 44px; }
   .addr { display: none; }

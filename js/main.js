@@ -65,19 +65,11 @@ async function boot() {
       $('.sub', intro).textContent = COPY.doneSub;
       // already on the list? the button just takes them back to the storefront
       claim.textContent = saved() ? COPY.backToStore : COPY.claim;
-      claim.hidden = false;
-      $('.aux').hidden = true;
+      claim.classList.remove('off'); claim.removeAttribute('aria-disabled');
+      $('.aux').style.visibility = 'hidden'; // keep its space so the button doesn't jump
       $('.steps', intro).classList.add('out');
       nudge.classList.remove('show'); clearTimeout(nudgeT);
       setTimeout(() => claim.focus({ preventScroll: true }), 50);
-    },
-    onIncomplete() {
-      // they undid it (spilled, lid or sleeve off): back to building
-      $('.headline', intro).textContent = COPY.headline;
-      $('.sub', intro).textContent = COPY.sub;
-      $('.steps', intro).classList.remove('out');
-      claim.hidden = true;
-      $('.aux').hidden = false;
     },
     onPeek() {
       const n = $('.peek-note');
@@ -97,7 +89,16 @@ async function boot() {
   });
 
   const openFlow = () => { A.unlock(); storeImg(); scene.pause(true); flow.open('q'); };
-  claim.addEventListener('click', () => (saved() ? toStore(false) : openFlow()));
+  // Inactive until the cup is made: a tap just points at what's left to do.
+  claim.addEventListener('click', () => {
+    if (claim.classList.contains('off')) {
+      const st = $('.steps', intro); st.classList.remove('flash'); void st.offsetWidth; st.classList.add('flash');
+      A.unlock(); A.haptic(12);
+      return;
+    }
+    saved() ? toStore(false) : openFlow();
+  });
+  if (saved()) claim.textContent = COPY.backToStore;
   auto.addEventListener('click', async () => { A.unlock(); auto.disabled = true; try { await scene.autoplay(); } finally { auto.disabled = false; } });
 
   // sound toggle
@@ -146,7 +147,9 @@ async function boot() {
   // The page itself never scrolls: block iOS rubber-banding (which also toggles Safari's
   // toolbar and nudges the layout). Only the sheet's own content may scroll.
   document.addEventListener('touchmove', (e) => {
-    const sc = e.target.closest && e.target.closest('.sheet-inner');
+    if (!e.target.closest) return;
+    if (e.target.closest('button, a, input, label')) return; // a slightly wobbly tap is still a tap
+    const sc = e.target.closest('.sheet-inner');
     if (!sc || sc.scrollHeight <= sc.clientHeight) e.preventDefault();
   }, { passive: false });
 

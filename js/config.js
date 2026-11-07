@@ -18,8 +18,8 @@ export const CONFIG = {
 
 export const COPY = {
   // First screen: why you're here, in two lines.
-  headline: 'Make a coffee, get a free one.',
-  sub: 'Build this cup to get a free coffee opening week.',
+  headline: 'Make your free coffee, pick it up opening week.',
+  sub: '',
   steps: { pour: 'Pour', sleeve: 'Sleeve', lid: 'Lid' },
   autoplay: 'Make it for me',
 
@@ -27,7 +27,7 @@ export const COPY = {
   nudgeEmpty: 'Set the press down to refill.',
 
   doneHeadline: 'Your cup is ready.',
-  doneSub: 'Claim it with your phone number.',
+  doneSub: '',
   claim: 'Claim my free coffee',
   backToStore: 'Back to the storefront',
 

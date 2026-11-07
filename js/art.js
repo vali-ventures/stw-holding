@@ -1,6 +1,6 @@
 // Sprite builders for every piece, drawn in Saintwood's house style:
 // dark forest-green pencil line art with hatching on cream paper,
-// plus their oxblood + coffee brown as the only solid colors.
+// plus their forest green (sleeve) + coffee brown as the only solid colors.
 
 import { Sketch, ellipsePts, polyPts, bezPts, mk } from './sketch.js';
 
@@ -103,7 +103,7 @@ export function cupSprites(H, scale) {
   return { body, rim, geo: g };
 }
 
-// ── Sleeve: oxblood band with the cream wordmark ─────────────
+// ── Sleeve: Saintwood forest-green band with the cream wordmark ─
 export function sleeveSprite(H, scale, free = false) {
   const g = cupGeo(H), sh = g.sleeveH;
   const wTop = g.widthAt(g.sleeveY + sh / 2) + 4, wBot = g.widthAt(g.sleeveY - sh / 2) + 4;
@@ -121,12 +121,12 @@ export function sleeveSprite(H, scale, free = false) {
     if (free) {
       // standing alone it's a ring: you can see in through the top
       const rim = ellipsePts(0, top, wTop / 2, ryT, 36);
-      sk.fill(rim, '#2a0805');
+      sk.fill(rim, '#020d06');
       sk.hatch(rim, '#000', { angle: -0.3, gap: 2, width: 0.5, alpha: 0.4, from: 0, to: 0.5 });
       const inner = ellipsePts(0, top + ryT * 0.35, wTop / 2 * 0.86, ryT * 0.55, 30);
       sk.fill(inner, '#f1ecdc');
     }
-    sk.fill(pts, P.oxblood);
+    sk.fill(pts, P.forest);
     // subtle corrugation ribs
     const c = sk.ctx; c.save(); c.strokeStyle = '#000'; c.lineWidth = 0.6;
     for (let i = -12; i <= 12; i++) {
@@ -140,10 +140,10 @@ export function sleeveSprite(H, scale, free = false) {
     c.restore();
     sk.hatch(pts, '#000', { angle: -1.25, gap: 2.2, width: 0.6, alpha: 0.35, from: 0.66, to: 1 });
     sk.hatch(pts, '#000', { angle: -1.25, gap: 3, width: 0.5, alpha: 0.2, from: 0, to: 0.12 });
-    wordmarkOn(sk, 0, -sh * 0.06 + ryT * 0.5, wTop * 0.66, P.cream, 0.97);
-    if (sh > 26) sk.text('BAGELS & BURGERS', 0, sh * 0.29 + ryT * 0.4, { font: `700 ${sh * 0.1}px Almarai, sans-serif`, color: P.cream, alpha: 0.85, spacing: sh * 0.022 });
-    sk.line(pts, P.brown, { width: 1.3, alpha: 0.9, close: true });
-    if (free) sk.line(ellipsePts(0, top, wTop / 2, ryT, 40), P.brown, { width: 1.1, alpha: 0.9, close: true });
+    wordmarkOn(sk, 0, -sh * 0.06 + ryT * 0.5, wTop * 0.66, "#ffffff", 1);
+    if (sh > 26) sk.text('BAGELS & BURGERS', 0, sh * 0.29 + ryT * 0.4, { font: `700 ${sh * 0.1}px Almarai, sans-serif`, color: "#ffffff", alpha: 0.9, spacing: sh * 0.022 });
+    sk.line(pts, '#020d06', { width: 1.3, alpha: 0.9, close: true });
+    if (free) sk.line(ellipsePts(0, top, wTop / 2, ryT, 40), '#020d06', { width: 1.1, alpha: 0.9, close: true });
   }, { toothAlpha: 0.14, gritAlpha: 0.1 });
   s.wTop = wTop; s.wBot = wBot;
   return s;

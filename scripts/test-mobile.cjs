@@ -56,6 +56,9 @@ const check = (dev, name, ok, detail = '') => { results.push({ dev, name, ok, de
     const pour = async (ms) => { const g = await G(); const side = g.pr[0] < g.cup[0] ? -1 : 1; await drag([g.pr, [g.cup[0] + side * g.H * 1.6, g.cup[1] - g.H * 1.6], [g.cup[0] + side * g.H * 0.75, g.cup[1] - g.H * 1.6]], { hold: ms }); };
     let g;
 
+    // ── 0. the claim button is there from the start, but inactive: tapping it doesn't open anything
+    await p.click('.claim', { force: true }); await p.waitForTimeout(300);
+    check(dev, 'inactive claim button does nothing yet', !(await p.isVisible('.sheet')) && await p.evaluate(() => document.querySelector('.claim').classList.contains('off')));
     // ── A. any order: lid → pour on lid → lid off → sleeve low → pour → lid on
     g = await G(); await drag([g.lid, [g.cup[0] + 6, g.cup[1] - g.H * 2.1]]);
     let s = await S(); check(dev, 'lid dropped from above clicks on', s.lid && s.ticks.includes('lid'));
@@ -85,7 +88,10 @@ const check = (dev, name, ok, detail = '') => { results.push({ dev, name, ok, de
     g = await G(); const c1 = [g.cup[0], g.cup[1] - g.H * 0.75]; const zig2 = [c1]; for (let i = 0; i < 8; i++) zig2.push([c1[0] + (i % 2 ? -1 : 1) * g.H * 0.55, c1[1] - g.H * 0.4]);
     await drag(zig2, { steps: 3, frame: 16, wait: 1200 });
     s = await S(); check(dev, 'shaking a lidded cup: no spill', Math.abs(s.fill - lidded) < 0.005 && s.lid, `fill ${lidded.toFixed(2)} → ${s.fill.toFixed(2)}`);
-    check(dev, 'done → claim button', s.done && await p.isVisible('.claim'), `ticks=${s.ticks}`);
+    check(dev, 'done → claim button', s.done && await p.evaluate(() => !document.querySelector('.claim').classList.contains('off')), `ticks=${s.ticks}`);
+    // once made, taking it apart again doesn't take the claim away
+    await p.evaluate(() => { const S = window.__scene; S.pieces.lid.attached = false; S._progress(); }); await p.waitForTimeout(500);
+    check(dev, 'claim stays active after taking the cup apart', await p.evaluate(() => !document.querySelector('.claim').classList.contains('off')));
     await p.screenshot({ path: `${OUT}/${dev.replace(/ /g, '_')}-done.png` });
     if (!isTouch) { await p.mouse.move(5, 5); }
 
@@ -117,7 +123,7 @@ const check = (dev, name, ok, detail = '') => { results.push({ dev, name, ok, de
       check(dev, 'Escape closes it and returns focus', await p.evaluate(() => document.querySelector('.sheet').hidden && document.activeElement.classList.contains('claim')));
     }
     // ── D. signup with the keyboard up
-    if (!(await p.isVisible('.claim'))) { check(dev, 'reached claim', false, JSON.stringify(await S())); await ctx.close(); continue; }
+    if (!(await p.evaluate(() => !document.querySelector('.claim').classList.contains('off')))) { check(dev, 'reached claim', false, JSON.stringify(await S())); await ctx.close(); continue; }
     await p.click('.claim'); await p.waitForTimeout(800);
     await p.click('.choice[data-value="coffee"]'); await p.waitForTimeout(900);
     const vp = cfg.viewport; if (isTouch) { await p.setViewportSize({ width: vp.width, height: Math.round(vp.height * 0.58) }); await p.waitForTimeout(400); }
