@@ -1,12 +1,21 @@
 // POST /api/signup — Vercel serverless function (Node runtime).
 // GET  /api/signup — health check: which storage sinks are configured (no data).
 // Also used by the local dev server (server/dev.js).
-import { handle, health, rateLimited } from '../lib/signup.js';
+import { handle, health, stats, rateLimited } from '../lib/signup.js';
 
 export default async function handler(req, res) {
   res.setHeader('cache-control', 'no-store');
   const send = (code, obj) => { res.statusCode = code; res.setHeader('content-type', 'application/json'); res.end(JSON.stringify(obj)); };
-  if (req.method === 'GET') return send(200, health());
+  if (req.method === 'GET') {
+    const q = String(req.url || '');
+    if (/[?&]stats\b/.test(q)) {
+      const tok = process.env.STATS_TOKEN || '';
+      const auth = String(req.headers.authorization || '');
+      if (!tok || auth !== 'Bearer ' + tok) return send(401, { ok: false, error: 'unauthorized' });
+      try { return send(200, await stats()); } catch (e) { return send(500, { ok: false, error: 'stats failed' }); }
+    }
+    return send(200, health());
+  }
   if (req.method !== 'POST') { res.statusCode = 405; res.setHeader('allow', 'GET, POST'); return res.end(); }
 
   // Same-origin only (blocks drive-by cross-site form posts).

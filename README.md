@@ -63,6 +63,16 @@ Data is an event log:
 
 Redemption codes are derived from the signup id (`CODE_SECRET` env, set it to anything random), so retries never mint a second code.
 
+## Checking signups
+
+`GET /api/signup?stats` with the header `Authorization: Bearer <STATS_TOKEN>` returns counts only, never phone numbers or emails. It reports signups, unique phones, how many look like tests, emails, Instagram taps, bagels/burgers/coffee, and the latest signup time. `STATS_TOKEN` is set in the Vercel project's environment variables.
+
+```bash
+curl -H "Authorization: Bearer $STATS_TOKEN" https://YOUR-DOMAIN/api/signup?stats
+```
+
+For the actual list, use `node scripts/export.mjs` (see below) or Upstash's data browser (Vercel → Storage → saintwood-signups), key `saintwood:signups`.
+
 ## Opening week
 
 ```bash
